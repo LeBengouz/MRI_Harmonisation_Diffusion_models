@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import pandas as pd
 
 
 def _gaussian_kernel_2d(sigma: float, device: torch.device, dtype=torch.float32):
@@ -86,7 +87,7 @@ def _global_quantile(tensor, q, max_samples = 2_000_000):
     return torch.quantile(sample, q)
 
 
-# main function
+# main function : Canny edge like anatomy extractor
 def make_structural_anatomy_map_2d(
     batch_imgs: torch.Tensor,
     grad_sigmas: tuple = (0.5, 2.0),
@@ -134,13 +135,49 @@ def make_structural_anatomy_map_2d(
     return normed
 
 
+# Anatomy beta encoder
+def load_beta_encoded_anatomy(csv_path, slice_names):
+    """
+    Charge les slices encodées (anatomie pré-calculée par l'anatomy mapper de DISt-CLIP) depuis un CSV.
+
+    Args:
+        csv_path:    chemin vers le .csv (colonnes: name, raw_path, encoded_path)
+        slice_names: liste des noms de slices à charger (colonne 'name')
+    Returns:
+        anatomy_map: (B, 1, H, W) torch.Tensor, une entrée par slice indiquée par slice_names
+    """
+    df = pd.read_csv(csv_path)
+    assert {"name", "raw_path", "encoded_path"}.issubset(df.columns)
+
+    slices = []
+    for name in slice_names:
+        row = df[df["name"] == name]
+        assert len(row) == 1, f"Slice '{name}' : {len(row)} correspondance(s) trouvée(s) dans le CSV"
+
+        encoded_path = Path(row["encoded_path"].values[0])
+        assert encoded_path.exists(), f"Fichier introuvable : {encoded_path}"
+
+        arr = np.load(encoded_path)
+        assert arr.ndim == 2, f"On attend shape : (H, W) pour '{name}', reçu {arr.shape}"
+        slices.append(torch.from_numpy(arr).float().unsqueeze(0))  # (1, H, W)
+
+    return torch.stack(slices, dim=0)
+
+
+
 
 if __name__ == "__main__":
     # test d'utilisation :
 
     # ====== Paramètres ======
+
+    # canny edge like
     SLICE_PATH = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw/oas-trio_53Sd0428R2.npy"
     OUTPUT_DIR  = "/NAS/coolio/benolive/Diffusion_beta_encoder/tests/anatomy_map_tests"
+
+    # beta encoder
+    CSV_PATH    = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data/data_by_name_train.csv"
+    SLICE_NAMES = ["oas-trio_53Sd0428R2"]          # liste ou nom unique
     # ========================
 
     output_dir = Path(OUTPUT_DIR)
@@ -157,25 +194,45 @@ if __name__ == "__main__":
 
     slice_out   = tensor[0, 0].numpy()
     anatomy_out = anatomy[0, 0].numpy()
+
+
+    # test beta encoder
+    anatomy_beta_encoded = load_beta_encoded_anatomy(CSV_PATH, SLICE_NAMES)  
+    assert anatomy_beta_encoded.ndim == 4, (
+        f"Attendu anatomy_beta_encoded shape (B, 1, H, W), reçu {anatomy_beta_encoded.shape}"
+    )
+    anatomy_beta_encoded_out = anatomy_beta_encoded[0, 0].detach().cpu().numpy()
+
     
     # sauvegardes
     np.save(output_dir / "slice_input.npy",   slice_out)
     np.save(output_dir / "anatomy_map.npy",   anatomy_out)
+    np.save(output_dir / "anatomy_beta_encoded.npy", anatomy_beta_encoded_out)
     print(f"[save] .npy sauvegardés dans {output_dir}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
-    axes[0].imshow(slice_out,   cmap="gray", vmin=-1, vmax=1)
-    axes[0].set_title("Slice brute (normalisée)")
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    axes[0].imshow(slice_out, cmap="gray", vmin=-1, vmax=1)
+    axes[0].set_title("Slice brute\nnormalisée")
     axes[0].axis("off")
 
-    axes[1].imshow(anatomy_out, cmap="coolwarm",  vmin=-1, vmax=1)
-    axes[1].set_title("Carte anatomique")
+    im1 = axes[1].imshow(anatomy_out, cmap="coolwarm", vmin=-1, vmax=1)
+    axes[1].set_title("Carte anatomique\nstructurelle")
     axes[1].axis("off")
 
-    fig.colorbar(axes[1].images[0], ax=axes[1], fraction=0.046, pad=0.04)
+    im2 = axes[2].imshow(anatomy_beta_encoded_out, cmap="coolwarm", vmin=-1, vmax=1)
+    axes[2].set_title("Carte anatomique\nbeta-encoded")
+    axes[2].axis("off")
+
+    fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+    fig.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
+
     fig.tight_layout()
+
     fig_path = output_dir / "anatomy_comparison.png"
     fig.savefig(fig_path, dpi=150)
     plt.close(fig)
+
     print(f"[fig] comparaison sauvegardée dans {fig_path}")
