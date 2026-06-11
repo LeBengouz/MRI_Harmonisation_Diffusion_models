@@ -168,6 +168,9 @@ cython_debug/
 *.pth
 *.ckpt
 
+# Dossier de tests
+/tests/
+
 
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python
