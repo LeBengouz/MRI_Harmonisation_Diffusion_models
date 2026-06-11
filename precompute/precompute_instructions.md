@@ -18,11 +18,12 @@ La pipeline complète comporte **5 étapes**, dont 2 sont gérées en dehors de 
 ```
 [0] listing_data.py          ← prérequis, exécuté au préalable
         ↓
-[1] extract_slices.py        ┐
-[2] beta_encoder_runner.py   ├─ run_precompute.py 
-[3] build_mrclip_dataset.py  ┘
+[1] extract_slices.py         ┐
+[2] beta_encoder_runner.py    ├─ run_precompute.py 
+[3] build_mr_clip_dataset.py  │
+[4] build_data_csv_by_name.py ┘
         ↓
-[4] MR-CLIP + embeddings     ← géré dans MarAI_2
+[5] MR-CLIP + embeddings     ← géré dans MarAI_2
 ```
 
 > **Important :** Les étapes 0 et 4 ne sont **pas** exécutées par `run_precompute.py`. Elles doivent être lancées manuellement avant et après ce script, respectivement.
@@ -46,7 +47,8 @@ project_root/
 │   ├── extract_slices.py
 │   ├── beta_encoder_runner.py
 │   ├── build_mrclip_dataset.py
-│   └── listing_data.py
+│   ├── listing_data.py
+│   └── build_data_csv_by_name.py
 ├── models/
 │   ├── beta_encoder.py
 │   └── anatomy_encoder.pt       ← checkpoint du beta-encoder
@@ -65,7 +67,7 @@ project_root/
 
 ---
 
-## Étape préliminaire — `listing_data.py`
+## Étape préliminaire - `listing_data.py`
 
 > **À exécuter avant `run_precompute.py`, géré séparément.**
 
@@ -79,7 +81,7 @@ Ce fichier CSV contient une colonne `volume_path` pointant vers chaque fichier `
 
 ---
 
-## Pipeline principal — `run_precompute.py`
+## Pipeline principal - `run_precompute.py`
 
 ### Lancement
 
@@ -101,7 +103,7 @@ python run_precompute.py --skip-extract
 
 ---
 
-### Étape 1 — Extraction des slices (`extract_slices.py`)
+### Étape 1 - Extraction des slices (`extract_slices.py`)
 
 Charge chaque volume `.pt` listé dans le CSV d'entrée, extrait la slice centrale selon l'axe Z, et la sauvegarde en `.npy` et `.png`.
 
@@ -123,7 +125,7 @@ Charge chaque volume `.pt` listé dans le CSV d'entrée, extrait la slice centra
 
 ---
 
-### Étape 2 — Encodage anatomique (`beta_encoder_runner.py`)
+### Étape 2 - Encodage anatomique (`beta_encoder_runner.py`)
 
 Pour chaque slice `.npy` extraite, passe la donnée dans le beta-encoder (UNet) afin de produire une représentation anatomique encodée. Les résultats sont sauvegardés en `.npy` dans le dossier `encoded/`.
 
@@ -142,7 +144,7 @@ Le device (CPU / CUDA) est détecté automatiquement.
 
 ---
 
-### Étape 3 — Construction du dataset MR-CLIP (`build_mrclip_dataset.py`)
+### Étape 3 - Construction du dataset MR-CLIP (`build_mrclip_dataset.py`)
 
 Génère le CSV d'entrée attendu par MR-CLIP dans le dépôt **MarAI_2**. Ce CSV liste chaque slice `.png` avec un texte descriptif par défaut puisque nous ne disposons pas des métadonnées DICOM.
 
@@ -160,7 +162,26 @@ Génère le CSV d'entrée attendu par MR-CLIP dans le dépôt **MarAI_2**. Ce CS
 
 ---
 
-## Étape finale — MR-CLIP et embeddings (MarAI_2)
+### Étape 4 - Construction du dataset MR-CLIP (`build_mrclip_dataset.py`)
+
+Génère le CSV d'entrée utilisé par le modèle de diffusion pour croiser la version brute avec l'encodage anatomique de la slice. Ce CSV liste donc chaque slace et son équivalent encodé ainsi que le nom du fichier (le même dans chaque directory).
+
+
+| Paramètre | Valeur par défaut | Description |
+|---|---|---|
+| `ENCODER_FOLDER_RAW` | Même variable que pour l'étape 2 | Dossier contenant les slices `.npy` raw |
+| `ENCODER_OUTPUT_DIR` | Même variable que pour l'étape 2 | Dossier contenant les slices `.npy` encoded |
+| `DATA_OUTPUT_DIR` | `/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data` | Chemin vers le dossier où enregistrer le csv. |
+| `CHECK_ENCODED_EXISTS` | False | Booléen pour ajouter une étape de vérifiaction. |
+| `SUFFIX` | `_train` | Suffixe apposé au nom du fichier CSV de sortie (`data_by_name{SUFFIX}.csv`). Partagé entre toutes les étapes pour la cohérence des nommages. |
+
+
+
+
+
+---
+
+## Étape finale - MR-CLIP et embeddings (MarAI_2)
 
 > **À exécuter après `run_precompute.py`, dans le dépôt MarAI_2.**
 

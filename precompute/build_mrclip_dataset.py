@@ -53,8 +53,8 @@ def generate_mrclip_csv(input_dir, output_dir, suffix, default_text):
 
 
 if __name__ == "__main__":
-    INPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/png"
-    OUTPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/prerequis_MRCLIP"
+    INPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/png"
+    OUTPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/prerequis_MRCLIP"
     DEFAULT_TEXT = "A brain MRI, plane NONE, Scanner (Manufacturer, Model, Field Strength): (NONE, NONE, NONE), Acquisition (Description, Sequence, Variant): (NONE, NONE, NONE), Imaging Parameters (Echo Time, Repetition Time, Inversion Time, Flip Angle): (NONE, NONE, NONE, NONE)"
     SUFFIX = "_train"
 

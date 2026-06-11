@@ -23,7 +23,7 @@ import torch
 import numpy as np
 
 # ── À adapter ─────────────────────────────────────────────────────────────────
-INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/listing_data_train.csv")
+INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/listing_data_train.csv")
 PT_PATH_COLUMN = "volume_path"
 N_DIAG         = 150   # nombre de volumes à tester
 # ──────────────────────────────────────────────────────────────────────────────

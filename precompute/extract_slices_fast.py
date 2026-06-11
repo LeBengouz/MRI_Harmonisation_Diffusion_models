@@ -28,7 +28,7 @@ from PIL import Image
 
 # Paramètres (par défault pour le train)
 
-DEFAULT_INPUT_CSV       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/listing_data_train.csv")
+DEFAULT_INPUT_CSV       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/listing_data_train.csv")
 DEFAULT_OUTPUT_DIR      = Path("../data/brain_slices/train/raw")          # slices .npy
 DEFAULT_PNG_OUTPUT_DIR  = Path("../data/brain_slices/train/png")          # slices .png
 DEFAULT_CSV_OUT         = Path("../data/csv_files/raw_slices_and_json_paths_train.csv")

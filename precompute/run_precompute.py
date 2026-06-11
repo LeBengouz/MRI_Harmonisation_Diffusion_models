@@ -35,6 +35,8 @@ from build_mrclip_dataset import generate_mrclip_csv
 # Import depuis models/ (dossier frère de precompute/)
 from models.beta_encoder import load_beta_encoder
 
+from build_data_csv_by_name import build_data_by_name_csv
+
 import torch
 from tqdm import tqdm
 
@@ -46,21 +48,21 @@ from tqdm import tqdm
 SUFFIX = "_train"   # suffixe commun à tous les fichiers de sortie nommés
 
 # 1) extract_slices 
-EXTRACT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/listing_data_train.csv")
-EXTRACT_OUTPUT_DIR     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/raw")
-EXTRACT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/png")
-EXTRACT_CSV_OUT        = Path(f"/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/raw_slices_and_json_paths{SUFFIX}.csv")
+EXTRACT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/listing_data_train.csv")
+EXTRACT_OUTPUT_DIR     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw")
+EXTRACT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/png")
+EXTRACT_CSV_OUT        = Path(f"/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/raw_slices_and_json_paths{SUFFIX}.csv")
 EXTRACT_Z_RATIO        = 0.5
 EXTRACT_NUM_WORKERS    = 4
 
 # 2) beta_encoder_runner
-ENCODER_FOLDER_RAW = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/raw")     # = EXTRACT_OUTPUT_DIR
-ENCODER_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/encoded")
-ENCODER_CKPT       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/models/anatomy_encoder.pt")
+ENCODER_FOLDER_RAW = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw")     # = EXTRACT_OUTPUT_DIR
+ENCODER_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/encoded")
+ENCODER_CKPT       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/models/anatomy_encoder.pt")
 
 # 3) build_mrclip_dataset
-MRCLIP_INPUT_DIR  = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/train/png")      # = EXTRACT_PNG_OUTPUT_DIR
-MRCLIP_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/prerequis_MRCLIP") 
+MRCLIP_INPUT_DIR  = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/png")      # = EXTRACT_PNG_OUTPUT_DIR
+MRCLIP_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/prerequis_MRCLIP") 
 MRCLIP_DEFAULT_TEXT = (
     "A brain MRI, plane NONE, "
     "Scanner (Manufacturer, Model, Field Strength): (NONE, NONE, NONE), "
@@ -68,6 +70,11 @@ MRCLIP_DEFAULT_TEXT = (
     "Imaging Parameters (Echo Time, Repetition Time, Inversion Time, Flip Angle): "
     "(NONE, NONE, NONE, NONE)"
 )
+
+# 4) build_data_csv_by_name
+DATA_OUTPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data"
+CHECK_ENCODED_EXISTS = False
+# Also using EXTRACT_OUTPUT_DIR and ENCODER_OUTPUT_DIR
 '''
 
 
@@ -77,21 +84,21 @@ MRCLIP_DEFAULT_TEXT = (
 SUFFIX = "_test"   # suffixe commun à tous les fichiers de sortie nommés
 
 # 1) extract_slices 
-EXTRACT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/listing_data_test.csv")
-EXTRACT_OUTPUT_DIR     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/test/raw")
-EXTRACT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/test/png")
-EXTRACT_CSV_OUT        = Path(f"/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/raw_slices_and_json_paths{SUFFIX}.csv")
+EXTRACT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/listing_data_test.csv")
+EXTRACT_OUTPUT_DIR     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw")
+EXTRACT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/png")
+EXTRACT_CSV_OUT        = Path(f"/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/raw_slices_and_json_paths{SUFFIX}.csv")
 EXTRACT_Z_RATIO        = 0.5
 EXTRACT_NUM_WORKERS    = 4
 
 # 2) beta_encoder_runner
-ENCODER_FOLDER_RAW = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/test/raw")    # = EXTRACT_OUTPUT_DIR
-ENCODER_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/test/encoded")
-ENCODER_CKPT       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/models/anatomy_encoder.pt")
+ENCODER_FOLDER_RAW = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw")    # = EXTRACT_OUTPUT_DIR
+ENCODER_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/encoded")
+ENCODER_CKPT       = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/models/anatomy_encoder.pt")
 
 # 3) build_mrclip_dataset
-MRCLIP_INPUT_DIR  = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/test/png")      # = EXTRACT_PNG_OUTPUT_DIR
-MRCLIP_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/prerequis_MRCLIP") 
+MRCLIP_INPUT_DIR  = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/png")      # = EXTRACT_PNG_OUTPUT_DIR
+MRCLIP_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/prerequis_MRCLIP") 
 MRCLIP_DEFAULT_TEXT = (
     "A brain MRI, plane NONE, "
     "Scanner (Manufacturer, Model, Field Strength): (NONE, NONE, NONE), "
@@ -99,6 +106,12 @@ MRCLIP_DEFAULT_TEXT = (
     "Imaging Parameters (Echo Time, Repetition Time, Inversion Time, Flip Angle): "
     "(NONE, NONE, NONE, NONE)"
 )
+
+# 4) build_data_csv_by_name
+DATA_OUTPUT_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data"
+CHECK_ENCODED_EXISTS = True
+# Also using EXTRACT_OUTPUT_DIR and ENCODER_OUTPUT_DIR
+
 #'''
 
 
@@ -173,6 +186,24 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def step_build_data_csv_by_name() -> None:
+    "Etape 4 - construire le csv pour le modèle de diffusion"
+    print("\n" + "=" * 60)
+    print("ÉTAPE 4 -  Construction du dataset pour le Diffusion model")
+    print("=" * 60)
+
+    csv_path = build_data_by_name_csv(
+        source_raw = EXTRACT_OUTPUT_DIR,
+        source_encoded = ENCODER_OUTPUT_DIR,
+        output_path = DATA_OUTPUT_DIR,
+        suffixe = SUFFIX,
+        check_encoded_exists = CHECK_ENCODED_EXISTS
+    )
+
+    print(f"CSV pour Diffusion Model enregistré : {csv_path}")
+
+
+
 def main() -> None:
     args = parse_args()
 
@@ -184,6 +215,7 @@ def main() -> None:
 
     step_beta_encoder()
     step_build_mrclip_dataset()
+    step_build_data_csv_by_name()
 
     print("\n" + "=" * 60)
     print("Pipeline de précompute terminé avec succès.")

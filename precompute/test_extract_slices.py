@@ -19,9 +19,9 @@ import torch
 
 # ── Paramètres ──────────────────────────────────────────────────────────────
 
-DEFAULT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/csv_files/listing_data_train.csv")
-DEFAULT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/experience_png/slices")
-DEFAULT_CSV_OUT        = Path("/NAS/coolio/benolive/Diffusion_beta_encoder_2D/data/brain_slices/experience_png/test_slices.csv")
+DEFAULT_INPUT_CSV      = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/listing_data_train.csv")
+DEFAULT_PNG_OUTPUT_DIR = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/experience_png/slices")
+DEFAULT_CSV_OUT        = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/experience_png/test_slices.csv")
 DEFAULT_Z_RATIO        = 0.5
 DEFAULT_N              = 5
 DEFAULT_NUM_WORKERS    = 4
