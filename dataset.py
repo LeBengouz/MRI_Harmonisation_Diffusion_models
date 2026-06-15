@@ -85,4 +85,82 @@ class SliceDataset(Dataset):
         - avoir un nom unique (utilisé comme `ds_name` dans le label) : sous forme [site acquisition]_[numero].npy -> ds_name = [site acquisition]
         - contenir un tableau 2D numpy float de shape (H, W)
     """
+    GAMMA_VALUES_DEFAULT = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]
+
+    def __init__(self, slice_dir, train = True, anatomy_mode: Literal["naive", "encoded"] = "naive", anatomy_csv_path = None, gamma_values = None,
+        augment_spatial = True):
+
+        self.slice_dir = Path(slice_dir)
+        self.train = train
+        self.anatomy_mode = anatomy_mode
+        self.anatomy_csv_path = anatomy_csv_path
+        self.augment_spatial = augment_spatial
+
+        assert self.slice_dir.exists(), f"Dossier des slices introuvable : {self.slice_dir}"
+ 
+        self.npy_files: List[Path] = sorted(self.slice_dir.glob("*.npy"))
+        assert len(self.npy_files) > 0, f"Aucun fichier .npy trouvé dans : {self.slice_dir}"
+ 
+        # Valeurs possibles pour l'augmentation gamma
+        self.gamma_values = gamma_values if gamma_values is not None else self.GAMMA_VALUES_DEFAULT
+
+ 
+        if anatomy_mode == "encoded":
+            assert anatomy_csv_path is not None, \
+                "anatomy_csv_path requis quand anatomy_mode='encoded'"
+            assert Path(anatomy_csv_path).exists(), \
+                f"CSV introuvable : {anatomy_csv_path}"
+
+        def __len__(self):
+            return len(self.npy_files)
+
+        def __getitem__(self, idx):
+            """
+            L'anatomy map est chargée et retournée ici pour charger avec le dataloader
+            """
+            npy_path = self.npy_files[idx]
+            slice_name = npy_path.stem
+            ds_name = npy_path.stem.rsplit("_", 1)[0]  
+
+            # conversion tensor (1, H, W)
+            arr = np.load(npy_path).astype(np.float32)
+            assert arr.ndim == 2, f"Attendu (H,W), reçu {arr.shape} pour {npy_path}"
+            img = torch.from_numpy(arr).unsqueeze(0)  # (1, H, W)
+
+            # augmentations si train (remplace torchio)
+            if self.train and self.augment_spatial:
+                img = _random_hflip(img, p=0.5)
+                img = _random_vflip(img, p=0.3)
+                img = _random_rotate90(img, p=0.3)
+
+
+            # augmentation gamma + label ?
+            if self.train:
+                log_gamma_val = random.choice(self.gamma_values)
+                img_augmented, _ = _random_gamma(img, log_gamma_range=(log_gamma_val, log_gamma_val))
+                label = f"{ds_name}_gamma_{log_gamma_val}"
+            else:
+                img_augmented = img
+                log_gamma_val = 0.0
+                label = f"{ds_name}_gamma_{log_gamma_val}"
+
+            # normaliser
+            img_augmented = _zscore_normalize(img_augmented)
+
+
+            # anatomy map
+            if self.anatomy_mode == "naive":
+                anat_map = make_structural_anatomy_map_2d(
+                    img.unsqueeze(0),  # (1, 1, H, W)
+                ).squeeze(0)  # -> (1, H, W)
     
+            else:  # encoded
+                # load_beta_encoded_anatomy attend une liste de noms
+                anat_map = load_beta_encoded_anatomy(
+                    csv_path=self.anatomy_csv_path,
+                    slice_names=[slice_name],
+                ).squeeze(0)  # (B=1, 1, H, W) -> (1, H, W)
+    
+            return img_augmented, anat_map, label
+ 
+
