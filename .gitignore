@@ -170,6 +170,8 @@ cython_debug/
 
 # Dossier de tests
 /tests/
+# fichier de tests
+test_format.py
 
 
 
