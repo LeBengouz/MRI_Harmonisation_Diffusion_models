@@ -43,6 +43,9 @@ from dataset import (
 from models.diffusion.unet import UNet2DConditionModel_Optimized
 from outils.checkpoints import load_checkpoint_if_exists, save_checkpoint
 
+from outils.visualization import plot_eval_batch
+import matplotlib.pyplot as plt
+
 
 
 
@@ -134,7 +137,7 @@ def build_model(cfg):
 
 # INFERENCE DDIM (eval)
 @torch.no_grad()
-def ddim_inference(model: nn.Module, noise_scheduler: DDIMScheduler, eval_slices, anat_map, cond_emb, uncond_emb, num_inference_steps = 50, guidance_scale = 1.0):
+def ddim_inference(model: nn.Module, noise_scheduler: DDIMScheduler, eval_slices, anat_map, cond_emb, uncond_emb, accelerator, num_inference_steps = 50, guidance_scale = 1.0):
     """
     Génération DDIM guidée par classifier-free guidance.
 
@@ -226,7 +229,7 @@ def train(cfg):
         model_diffusion, embedder, optimizer, train_loader, test_loader
     )
  
-    # Reprise depuis checkpoint
+    # Reprise depuis checkpoint; si resume_from=None, la fonction retourne (0, 0) -> start_epoch = 0, global_step=0
     start_epoch, global_step = load_checkpoint_if_exists(
         cfg["resume_from"], model_diffusion, embedder, optimizer, accelerator
     )
@@ -320,13 +323,22 @@ def train(cfg):
                 diffused_latents = ddim_inference(
                     model=accelerator.unwrap_model(model_diffusion),
                     noise_scheduler=noise_scheduler,
+                    eval_slices=eval_slices,
                     anat_map=eval_anat_maps,
                     cond_emb=cond_emb,
                     uncond_emb=uncond_emb,
-                    device=accelerator.device,
+                    accelerator=accelerator,
                     num_inference_steps=cfg["num_inference_steps"],
                     guidance_scale=1.0,
                 )
+
+                if accelerator.is_main_process:
+                    fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents)
+                    if writer is not None:
+                        writer.add_figure("eval/inference_visualization", fig, epoch)
+                    fig.savefig(os.path.join(cfg["checkpoint_dir"], f"vis_epoch{epoch:04d}.png"), bbox_inches="tight")
+                    plt.close(fig)
+            
  
         # Sauvegarde checkpoint
         if (epoch + 1) % cfg["save_every_epoch"] == 0 or epoch == cfg["num_epochs"] - 1:
