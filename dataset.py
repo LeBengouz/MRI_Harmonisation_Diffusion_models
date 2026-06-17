@@ -159,7 +159,7 @@ class SliceDataset(Dataset):
             anat_map = load_beta_encoded_anatomy(
                 csv_path=self.anatomy_csv_path,
                 slice_names=[slice_name],
-            ).squeeze(0)  # (B=1, 1, H, W) -> (1, H, W)
+            ).squeeze(0)  # (B=1, 1, H, W) -> (1, H, W)Building Trustworthy AI Agents
 
         return img_augmented, anat_map, label
  
@@ -230,6 +230,42 @@ def build_label_mapping_from_csv(anatomy_csv_path, gamma_values: Optional[List[f
     print(f"Nombre de classes: {n_classes}")
  
     return ds2id, id2ds
+
+
+def collate_fn_with_label_ids(
+    batch: List[Tuple[torch.Tensor, torch.Tensor, str]],
+    ds2id: Dict[str, int],
+    p_uncond: float = 0.15,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Collate function pour assembler une liste de données en batch. Besoin car on ajoute des opérations particulières :
+    - stack : assemble les tenseurs individuels en batch
+    - Conversion string : traduit chaque label string en index entier via ds2id.
+    -  Masquage CFG = remplace certains label_ids par 0 avec probabilité p_uncond. (Classifier-Free-Guidance)
+    
+    Args:
+        batch:    Liste de (slice_z, anat_map, label_str) venant du Dataset.
+        ds2id:    Mapping label_str -> int issu de build_label_mapping.
+        p_uncond: Probabilité de masquage pour le classifier-free guidance.
+ 
+    Returns:
+        slices    : (B, 1, H, W)
+        anat_maps : (B, 1, H, W)
+        label_ids : (B,) LongTensor - 0 = non-conditionné
+    """
+    slices, anat_maps, labels = zip(*batch)
+ 
+    slices = torch.stack(slices, dim=0)       # (B, 1, H, W)
+    anat_maps = torch.stack(anat_maps, dim=0) # (B, 1, H, W)
+ 
+    ids = torch.tensor([ds2id[l] for l in labels], dtype=torch.long)
+ 
+    # Masquage classifier-free guidance
+    mask = torch.rand(ids.shape) < p_uncond
+    ids[mask] = 0
+ 
+    return slices, anat_maps, ids
+
 
 
 if __name__ == "__main__":
