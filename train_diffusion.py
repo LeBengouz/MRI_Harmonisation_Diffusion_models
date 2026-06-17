@@ -53,10 +53,10 @@ import matplotlib.pyplot as plt
  
 CFG = {
     # Chemins
-    "train_dir":      "/data/brain_slices/train/raw",
-    "test_dir":       "/data/brain_slices/test/raw",
-    "checkpoint_dir": "/checkpoints_diffusion/diffusion_2d",
-    "tb_log_dir":     "/tensor_board_logs/logs_2d",
+    "train_dir":      "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw",
+    "test_dir":       "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw",
+    "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d",
+    "tb_log_dir":     "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d",
     "resume_from":    None,   # ex: "checkpoints_diffusion/diffusion_2d/ckpt_ep0010_full.pt"
  
     # Mode anatomique : "naive" ou "encoded"
@@ -203,11 +203,19 @@ def ddim_inference(model: nn.Module, noise_scheduler: DDIMScheduler, eval_slices
 
 
 def train(cfg):
+    print("[train] démarrage de l'entraînement")
+
+
     # Label mapping
     if cfg["anatomy_mode"] == "encoded" and cfg["anatomy_csv_path"] is not None:
         ds2id, _ = build_label_mapping_from_csv(cfg["anatomy_csv_path"])
     else:
         ds2id, _ = build_label_mapping(cfg["train_dir"])
+
+    # Debug - print des classes
+    # print("labels:")
+    # for label in list(ds2id.keys())[:]:
+    #    print(f"  {label} -> {ds2id[label]}")
  
     n_classes = len(ds2id)
     print(f"[dataset] {n_classes} classes")
@@ -356,3 +364,5 @@ def train(cfg):
     if accelerator.is_main_process and writer is not None:
         writer.close()
  
+if __name__ == "__main__":
+    train(CFG)

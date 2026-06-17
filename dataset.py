@@ -48,7 +48,7 @@ def _random_vflip(img, p = 0.5):
         return img.flip(-2)
     return img
  
- 
+# non utilisé -> à delete
 def _random_rotate90(img, p = 0.5):
     """Rotation 90 degrés aléatoire. img: (1, H, W) - tensor"""
     if random.random() < p:
@@ -131,7 +131,7 @@ class SliceDataset(Dataset):
         if self.train and self.augment_spatial:
             img = _random_hflip(img, p=0.5)
             img = _random_vflip(img, p=0.3)
-            img = _random_rotate90(img, p=0.3)
+            # img = _random_rotate90(img, p=0.3) # supp car rotation 90 degrés pose problème de dimensions
 
 
         # augmentation gamma + label ?

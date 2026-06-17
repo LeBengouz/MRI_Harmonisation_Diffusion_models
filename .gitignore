@@ -173,6 +173,9 @@ cython_debug/
 # fichier de tests
 test_format.py
 
+# logs tensor boards
+/tensor_board_logs/
+
 
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python
