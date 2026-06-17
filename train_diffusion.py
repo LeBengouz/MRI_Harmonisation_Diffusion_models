@@ -69,8 +69,8 @@ CFG = {
     "num_epochs":        3000,
     "lr":                1e-4,
     "batch_size":        8,
-    "eval_every_epoch":  1,
-    "save_every_epoch":  1,
+    "eval_every_epoch":  5,
+    "save_every_epoch":  5,
     "p_uncond":          0.15,   # probabilité de masquage classifier-free guidance
     "num_workers":       4,
  
@@ -341,10 +341,10 @@ def train(cfg):
                 )
 
                 if accelerator.is_main_process:
-                    fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents)
+                    fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents, epoch)
                     if writer is not None:
                         writer.add_figure("eval/inference_visualization", fig, epoch)
-                    fig.savefig(os.path.join(cfg["checkpoint_dir"], f"vis_epoch{epoch:04d}.png"), bbox_inches="tight")
+                    fig.savefig(os.path.join(cfg["checkpoint_dir"], f"vis_epoch{epoch+1:04d}.png"), bbox_inches="tight")
                     plt.close(fig)
             
  
