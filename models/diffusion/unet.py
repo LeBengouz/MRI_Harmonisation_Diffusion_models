@@ -192,11 +192,10 @@ class UNet2DConditionModel_Optimized(nn.Module):
         # down path
         skips = []
         for i, db in enumerate(self.down_blocks):
-            for i, db in enumerate(self.down_blocks):
-                x = self._maybe_checkpoint(db, x, t_emb, encoder_hidden_states)
-                skips.append(x)
-                if i < len(self.downsamplers):
-                    x = self.downsamplers[i](x)
+            x = self._maybe_checkpoint(db, x, t_emb, encoder_hidden_states)
+            skips.append(x)
+            if i < len(self.downsamplers):
+                x = self.downsamplers[i](x)
 
         # bottleneck
         x = self._maybe_checkpoint(self.mid_block1, x, t_emb)
