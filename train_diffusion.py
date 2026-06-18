@@ -41,7 +41,7 @@ from dataset import (
     collate_fn_with_label_ids,
 )
 from models.diffusion.unet import UNet2DConditionModel_Optimized
-from outils.checkpoints import load_checkpoint_if_exists, save_checkpoint
+from outils.checkpoints import load_checkpoint_if_exists, save_checkpoint, load_checkpoint_for_eval
 
 from outils.visualization import plot_eval_batch
 import matplotlib.pyplot as plt
@@ -57,8 +57,8 @@ CFG = {
     "test_dir":       "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw",
     "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d",
     "tb_log_dir":     "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d",
-    "resume_from":    None,   # ex: "checkpoints_diffusion/diffusion_2d/ckpt_ep0010_full.pt"
- 
+    "resume_from":    None,   # path du checkpoint
+
     # Mode anatomique : "naive" ou "encoded"
     # "naive"   -> make_structural_anatomy_map_2d calculée dans SliceDataset
     # "encoded" -> load_beta_encoded_anatomy pré-calculée via CSV
@@ -134,6 +134,14 @@ def build_model(cfg):
     )
 
 
+def build_label_mapping_for_cfg(cfg):
+    if cfg["anatomy_mode"] == "encoded" and cfg["anatomy_csv_path"] is not None:
+        ds2id, _ = build_label_mapping_from_csv(cfg["anatomy_csv_path"])
+    else:
+        ds2id, _ = build_label_mapping(cfg["train_dir"])
+    return ds2id
+
+
 
 # INFERENCE DDIM (eval)
 @torch.no_grad()
@@ -205,12 +213,8 @@ def ddim_inference(model: nn.Module, noise_scheduler: DDIMScheduler, eval_slices
 def train(cfg):
     print("[train] démarrage de l'entraînement")
 
-
     # Label mapping
-    if cfg["anatomy_mode"] == "encoded" and cfg["anatomy_csv_path"] is not None:
-        ds2id, _ = build_label_mapping_from_csv(cfg["anatomy_csv_path"])
-    else:
-        ds2id, _ = build_label_mapping(cfg["train_dir"])
+    ds2id = build_label_mapping_for_cfg(cfg)
 
     # Debug - print des classes
     # print("labels:")
@@ -363,6 +367,111 @@ def train(cfg):
     # Fermeture TensorBoard
     if accelerator.is_main_process and writer is not None:
         writer.close()
+
+
+# Evaluation seule, sans entraînement
+def evaluate(cfg, checkpoint_path):
+    """
+    Charge un checkpoint existant et évalue le modèle :
+        - calcule la loss MSE moyenne (bruit prédit vs bruit réel) sur tout test_loader,
+        - sauvegarde une figure d'un batch.
+ 
+    /!\ checkpoint_path est obligatoire ici
+    """
+    print(f"[Eval] Evaluation depuis {checkpoint_path}")
+ 
+    if checkpoint_path is None:
+        raise ValueError("[evaluate] checkpoint_path est requis pour évaluer un modèle")
+ 
+    ds2id = build_label_mapping_for_cfg(cfg)
+    n_classes = len(ds2id)
+    print(f"[dataset] {n_classes} classes")
+ 
+    accelerator = Accelerator(mixed_precision="fp16")
+ 
+    model_diffusion = build_model(cfg)
+    embedder        = nn.Embedding(n_classes + 1, cfg["cross_attention_dim"])
+ 
+    noise_scheduler = DDIMScheduler(num_train_timesteps=cfg["num_train_timesteps"])
+    mse_loss = nn.MSELoss()
+ 
+    _, test_loader = build_dataloaders(cfg, ds2id) # si jeu eval, remplacer ici
+
+    model_diffusion, embedder, test_loader = accelerator.prepare( model_diffusion, embedder, test_loader)
+ 
+    epoch_loaded, step_loaded = load_checkpoint_for_eval(checkpoint_path, model_diffusion, embedder, accelerator)
+    print(f"[Eval] checkpoint chargé (epoch={epoch_loaded}, step={step_loaded})")
+ 
+    os.makedirs(cfg["checkpoint_dir"], exist_ok=True)
+ 
+    model_diffusion.eval()
+ 
+    # 1) Loss MSE moyenne sur tout le test set
+    total_loss = 0.0
+    n_batches = 0
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc="evaluate - loss", disable=not accelerator.is_main_process):
+            slices, anat_maps, label_ids = batch
+            slices = slices.to(accelerator.device, non_blocking=True).float()
+            anat_maps = anat_maps.to(accelerator.device, non_blocking=True).float()
+            label_ids = label_ids.to(accelerator.device)
+ 
+            batch_size = slices.shape[0]
+            timesteps = torch.randint(
+                0, noise_scheduler.num_train_timesteps, (batch_size,),
+                device=accelerator.device, dtype=torch.long,
+            )
+ 
+            noise = torch.randn_like(slices)
+            noisy_latents = noise_scheduler.add_noise(slices, noise, timesteps)
+            label_embedding = embedder(label_ids).unsqueeze(1)
+ 
+            model_input = torch.cat([noisy_latents, anat_maps], dim=1)
+            noise_pred = model_diffusion(model_input, timesteps, encoder_hidden_states=label_embedding)
+ 
+            loss = mse_loss(noise_pred.float(), noise.float())
+            total_loss += loss.item()
+            n_batches += 1
+ 
+    avg_loss = total_loss / max(n_batches, 1)
+    if accelerator.is_main_process:
+        print(f"[evaluate] loss MSE moyenne sur test set : {avg_loss:.6f}")
+ 
+    # 2) Génération DDIM sur un batch + sauvegarde de la figure
+    with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        eval_slices, eval_anat_maps, eval_label_ids = next(iter(test_loader))
+        eval_slices    = eval_slices.to(accelerator.device, non_blocking=True).float()
+        eval_anat_maps = eval_anat_maps.to(accelerator.device, non_blocking=True).float()
+        eval_label_ids = eval_label_ids.to(accelerator.device)
+ 
+        cond_emb   = embedder(eval_label_ids).unsqueeze(1)
+        uncond_ids = torch.zeros_like(eval_label_ids, dtype=torch.long)
+        uncond_emb = embedder(uncond_ids).unsqueeze(1)
+ 
+        diffused_latents = ddim_inference(
+            model=accelerator.unwrap_model(model_diffusion),
+            noise_scheduler=noise_scheduler,
+            eval_slices=eval_slices,
+            anat_map=eval_anat_maps,
+            cond_emb=cond_emb,
+            uncond_emb=uncond_emb,
+            accelerator=accelerator,
+            num_inference_steps=cfg["num_inference_steps"],
+            guidance_scale=1.0,
+        )
+ 
+        if accelerator.is_main_process:
+            fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents, epoch_loaded)
+            fig.savefig(os.path.join(cfg["checkpoint_dir"], f"vis_eval_only_ep{epoch_loaded:04d}.png"), bbox_inches="tight")
+            plt.close(fig)
+            print(f"[evaluate] figure sauvegardée dans {cfg['checkpoint_dir']}")
+ 
+    return avg_loss
+
+
+
+
  
 if __name__ == "__main__":
-    train(CFG)
+    #train(CFG)
+    evaluate(CFG, "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/ckpt_ep0015_full.pt")

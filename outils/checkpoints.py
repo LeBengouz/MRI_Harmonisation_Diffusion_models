@@ -45,3 +45,26 @@ def load_checkpoint_if_exists(resume_from, model_diffusion, embedder, optimizer,
 
     # return the epoch index to start from and the global step count
     return start_epoch, global_step
+
+
+def load_checkpoint_for_eval(checkpoint_path, model_diffusion, embedder, accelerator):
+    """
+    Charge un checkpoint pour évaluation seulement.
+ 
+    Contrairement à load_checkpoint_if_exists, ne prend PAS d'optimizer.
+    Doit être appelé APRES accelerator.prepare(model_diffusion, embedder, ...).
+
+    Il faut absolument que le checkpoint existe :
+    la validation de checkpoint_path (None ou non) est faite en amont par
+    l'appelant (cf. evaluate() dans train_diffusion.py) 
+    """
+    ckpt = torch.load(checkpoint_path, map_location=accelerator.device)
+ 
+    unwrapped_model = accelerator.unwrap_model(model_diffusion)
+    unwrapped_model.load_state_dict(ckpt["model_state_dict"])
+    embedder.load_state_dict(ckpt["embedder_state_dict"])
+ 
+    epoch = ckpt.get("epoch", 0)
+    global_step = ckpt.get("step", 0)
+    print(f"Checkpoint chargé depuis {checkpoint_path} à partir de l'epoch ={epoch}, global_step={global_step}")
+    return epoch, global_step
