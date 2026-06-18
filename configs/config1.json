@@ -7,7 +7,9 @@
   "resume_from": null,
 
   "anatomy_mode": "naive",
-  "anatomy_csv_path": null,
+  "anatomy_csv_path_train": null,
+  "anatomy_csv_path_test": null,
+
 
   "num_epochs": 3000,
   "lr": 0.0001,

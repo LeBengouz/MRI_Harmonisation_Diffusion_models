@@ -1,13 +1,15 @@
 {
-  "_comment": "Config modèle de diffusion 2D - experience avec encoder naif - config1",
+  "_comment": "Config modèle de diffusion 2D - experience avec beta encoder pré computed - config2",
   "train_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw",
   "test_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw",
-  "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/config1",
-  "tb_log_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d/config1",
+  "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/config2",
+  "tb_log_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d/config2",
   "resume_from": null,
 
   "anatomy_mode": "encoded",
-  "anatomy_csv_path": null,
+  "anatomy_csv_path_train": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data/data_by_name_train.csv",
+  "anatomy_csv_path_test": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data/data_by_name_test.csv",
+
 
   "num_epochs": 3000,
   "lr": 0.0001,

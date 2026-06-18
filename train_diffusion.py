@@ -62,8 +62,8 @@ def build_dataloaders(cfg, ds2id):
     )
 
 
-    train_ds = SliceDataset(slice_dir=cfg["train_dir"], train=True, anatomy_mode=cfg["anatomy_mode"],anatomy_csv_path=cfg["anatomy_csv_path"])
-    test_ds = SliceDataset(slice_dir=cfg["test_dir"], train=False, anatomy_mode=cfg["anatomy_mode"], anatomy_csv_path=cfg["anatomy_csv_path"])
+    train_ds = SliceDataset(slice_dir=cfg["train_dir"], train=True, anatomy_mode=cfg["anatomy_mode"],anatomy_csv_path=cfg["anatomy_csv_path_train"])
+    test_ds = SliceDataset(slice_dir=cfg["test_dir"], train=False, anatomy_mode=cfg["anatomy_mode"], anatomy_csv_path=cfg["anatomy_csv_path_test"])
 
     # Data Loaders
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True, num_workers=cfg["num_workers"], 
@@ -91,11 +91,21 @@ def build_model(cfg):
 
 
 def build_label_mapping_for_cfg(cfg):
-    if cfg["anatomy_mode"] == "encoded" and cfg["anatomy_csv_path"] is not None:
-        ds2id, _ = build_label_mapping_from_csv(cfg["anatomy_csv_path"])
+    if cfg["anatomy_mode"] == "encoded":
+        csv_paths = [
+            p for p in (cfg["anatomy_csv_path_train"], cfg["anatomy_csv_path_test"])
+            if p is not None
+        ]
+        if len(csv_paths) == 0:
+            raise ValueError(
+                "[build_label_mapping_for_cfg] anatomy_mode='encoded' requiert au moins "
+                "anatomy_csv_path_train ou anatomy_csv_path_test dans la config"
+            )
+        ds2id, _ = build_label_mapping_from_csv(csv_paths)
     else:
         ds2id, _ = build_label_mapping(cfg["train_dir"])
     return ds2id
+
 
 
 

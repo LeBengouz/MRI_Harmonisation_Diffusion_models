@@ -15,7 +15,7 @@ from train_diffusion import train, evaluate
  
 
  
-CONFIG_PATH = "configs/config1.json" 
+CONFIG_PATH = "configs/config2.json" 
 MODE = "train" # train ou eval
 EVAL_CHECKPOINT_PATH = None # (obligatoire si MODE == "eval")
 

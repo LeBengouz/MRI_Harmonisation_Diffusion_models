@@ -200,22 +200,32 @@ def build_label_mapping(slice_dir, gamma_values: Optional[List[float]] = None) -
 
 def build_label_mapping_from_csv(anatomy_csv_path, gamma_values: Optional[List[float]] = None,) -> Tuple[Dict[str, int], Dict[int, str]]:
     """
-    Alternative plus rapide de build_label_mapping utilisant le CSV de l'anatomy encoder.
+    Alternative plus rapide de build_label_mapping utilisant le(s) CSV de l'anatomy encoder.
     (colonnes : name, raw_path, encoded_path)
  
     Utile quand anatomy_mode="encoded" . Le mapping recouvrira donc que les sites concernés et ira plus vite en lecture.
+    
+    anatomy_csv_path: chemin vers un CSV (str), OU liste de chemins
     """
     gamma_values = gamma_values or SliceDataset.GAMMA_VALUES_DEFAULT
+
+    # transforme en liste pour traiter str unique et liste de chemins de la me manière
+    csv_paths = [anatomy_csv_path] if isinstance(anatomy_csv_path, str) else list(anatomy_csv_path)
+    assert len(csv_paths) > 0, "Au moins un chemin de CSV doit être fourni"
  
-    df = pd.read_csv(anatomy_csv_path)
-    assert "name" in df.columns, "Le CSV doit contenir une colonne 'name'"
- 
-    ds_names = sorted(df["name"].astype(str).str.rsplit("_", n=1).str[0].unique().tolist())
-    assert len(ds_names) > 0, f"Aucun nom (name) valide trouvé dans {anatomy_csv_path}"
+    ds_names_all = set()
+    for csv_path in csv_paths:
+        df = pd.read_csv(csv_path)
+        assert "name" in df.columns, f"Le CSV doit contenir une colonne 'name' ({csv_path})"
+        ds_names = df["name"].astype(str).str.rsplit("_", n=1).str[0].unique().tolist()
+        ds_names_all.update(ds_names)
+
+    ds_names_all = sorted(ds_names_all)
+    assert len(ds_names_all) > 0, f"Aucun nom (name) valide trouvé dans {csv_paths}"
 
     all_labels = set()
 
-    for name in ds_names:
+    for name in ds_names_all:
         for g in gamma_values:
             label = f"{name}_gamma_{g}"
             all_labels.add(label)
