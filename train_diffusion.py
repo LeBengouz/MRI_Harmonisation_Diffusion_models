@@ -48,50 +48,6 @@ import matplotlib.pyplot as plt
 
 
 
-
-# Configuration -> A déplacer dans un fichier dédié plus tard
- 
-CFG = {
-    # Chemins
-    "train_dir":      "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw",
-    "test_dir":       "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw",
-    "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d",
-    "tb_log_dir":     "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d",
-    "resume_from":    None,   # path du checkpoint
-
-    # Mode anatomique : "naive" ou "encoded"
-    # "naive"   -> make_structural_anatomy_map_2d calculée dans SliceDataset
-    # "encoded" -> load_beta_encoded_anatomy pré-calculée via CSV
-    "anatomy_mode":     "naive",
-    "anatomy_csv_path": None,   # requis si anatomy_mode="encoded"
- 
-    # Hyperparamètres
-    "num_epochs":        3000,
-    "lr":                1e-4,
-    "batch_size":        8,
-    "eval_every_epoch":  5,
-    "save_every_epoch":  5,
-    "p_uncond":          0.15,   # probabilité de masquage classifier-free guidance
-    "num_workers":       4,
- 
-    # Scheduler de diffusion
-    "num_train_timesteps": 1000,
-    "num_inference_steps": 50,
- 
-    # UNet
-    "in_channels":          2,      # slice bruitée + carte anatomique
-    "out_channels":         1,      # pred bruit
-    "block_out_channels":   (32, 64, 256, 512),
-    "cross_attention_dim":  512,
-    "attention_head_dim":   64,
-    "time_embedding_dim":   512,
-    "gradient_checkpointing": True,
-    "attention_pool":       True,
-    "attn_pool_kernel":     2,
-    "attn_on_resolutions":  [2, 3],
-}
-
-
 # setup des dataloaders 
 
 def build_dataloaders(cfg, ds2id):
@@ -468,10 +424,3 @@ def evaluate(cfg, checkpoint_path):
  
     return avg_loss
 
-
-
-
- 
-if __name__ == "__main__":
-    #train(CFG)
-    evaluate(CFG, "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/ckpt_ep0015_full.pt")

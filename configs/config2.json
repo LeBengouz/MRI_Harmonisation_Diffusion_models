@@ -1,0 +1,33 @@
+{
+  "_comment": "Config modèle de diffusion 2D - experience avec encoder naif - config1",
+  "train_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw",
+  "test_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/test/raw",
+  "checkpoint_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/config1",
+  "tb_log_dir": "/NAS/coolio/benolive/Diffusion_beta_encoder/tensor_board_logs/logs_2d/config1",
+  "resume_from": null,
+
+  "anatomy_mode": "encoded",
+  "anatomy_csv_path": null,
+
+  "num_epochs": 3000,
+  "lr": 0.0001,
+  "batch_size": 8,
+  "eval_every_epoch": 10,
+  "save_every_epoch": 10,
+  "p_uncond": 0.15,
+  "num_workers": 4,
+
+  "num_train_timesteps": 1000,
+  "num_inference_steps": 50,
+
+  "in_channels": 2,
+  "out_channels": 1,
+  "block_out_channels": [32, 64, 256, 512],
+  "cross_attention_dim": 512,
+  "attention_head_dim": 64,
+  "time_embedding_dim": 512,
+  "gradient_checkpointing": true,
+  "attention_pool": true,
+  "attn_pool_kernel": 2,
+  "attn_on_resolutions": [2, 3]
+}
