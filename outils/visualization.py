@@ -26,7 +26,7 @@ def normalize_for_display(im: np.ndarray, p_low: float = 1.0, p_high: float = 99
     return (im_clipped - p1) / (p99 - p1 + 1e-5)
  
  
-def plot_eval_batch(slice_origine, anatomy_map, generated_slice, epoch, sample_idx = 0):
+def plot_eval_batch(slice_origine, anatomy_map, generated_slice, epoch, sample_idx = 0, mse=None):
     """
     Produit une figure matplotlib 3*1 pour suivre visuellement l'entraînement
 
@@ -36,6 +36,7 @@ def plot_eval_batch(slice_origine, anatomy_map, generated_slice, epoch, sample_i
         anatomy_map:       (B, 1, H, W) = cartes anatomiques
         generated_slice:      (B, 1, H, W) = slices générées par DDIM
         sample_idx:     index dans le batch (par default à 0)
+        mse:            Valeur MSE sur test set
  
     Returns:
         figure (à logger dans TensorBoard ou sauvegarder)
@@ -48,7 +49,8 @@ def plot_eval_batch(slice_origine, anatomy_map, generated_slice, epoch, sample_i
     row_titles = ["Original", "Anat map", "DDIM output"]
  
     fig, axes = plt.subplots(3, 1, figsize=(5, 12))
-    fig.suptitle(f"Epoch {epoch}", fontsize=13, fontweight="bold")
+    mse_str = f" | MSE : {mse:.6f}" if mse is not None else ""
+    fig.suptitle(f"Epoch {epoch}{mse_str}", fontsize=13, fontweight="bold")
     plt.subplots_adjust(hspace=0.3)
  
     for r, (im, title) in enumerate(zip(imgs, row_titles)):

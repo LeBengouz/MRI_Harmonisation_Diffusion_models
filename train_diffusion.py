@@ -521,7 +521,7 @@ def evaluate(cfg, checkpoint_path):
         )
  
         if accelerator.is_main_process:
-            fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents, epoch_loaded)
+            fig = plot_eval_batch(eval_slices, eval_anat_maps, diffused_latents, epoch_loaded, mse=avg_loss)
             fig.savefig(os.path.join(cfg["checkpoint_dir"], f"vis_eval_only_ep{epoch_loaded:04d}.png"), bbox_inches="tight")
             plt.close(fig)
             print(f"[evaluate] figure sauvegardée dans {cfg['checkpoint_dir']}")
