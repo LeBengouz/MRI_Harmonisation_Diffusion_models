@@ -34,6 +34,8 @@ REQUIRED_KEYS = [
     "attention_pool",
     "attn_pool_kernel",
     "attn_on_resolutions",
+    "early_stopping_patience",
+    "early_stopping_min_delta",
 ]
  
  

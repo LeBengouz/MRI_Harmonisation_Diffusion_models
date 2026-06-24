@@ -41,7 +41,7 @@ def _random_hflip(img, p = 0.5):
         return img.flip(-1)
     return img
  
- 
+# Non utilisé car produit cerveau ne pouvant pas apparaitre réellement -> data augmentation inutile
 def _random_vflip(img, p = 0.5):
     """Flip vertical aléatoire. img: (1, H, W) - tensor"""
     if random.random() < p:
@@ -127,11 +127,16 @@ class SliceDataset(Dataset):
         assert arr.ndim == 2, f"Attendu (H,W), reçu {arr.shape} pour {npy_path}"
         img = torch.from_numpy(arr).unsqueeze(0)  # (1, H, W)
 
-        # augmentations si train (remplace torchio)
-        if self.train and self.augment_spatial:
-            img = _random_hflip(img, p=0.5)
-            img = _random_vflip(img, p=0.3)
+        # augmentations si train (remplace torchio) -> vieux fonctionnement garantissant pas coherence anat map
+        # if self.train and self.augment_spatial:
+        #    img = _random_hflip(img, p=0.5)
+            # img = _random_vflip(img, p=0.3) 
             # img = _random_rotate90(img, p=0.3) # supp car rotation 90 degrés pose problème de dimensions
+        if self.train and self.augment_spatial:
+            # On tire le dé UNE seule fois et on applique la même décision aux deux tenseurs plus tard
+            do_hflip = random.random() < 0.5
+        else:
+            do_hflip = False
 
 
         # augmentation gamma + label ?
@@ -160,6 +165,10 @@ class SliceDataset(Dataset):
                 csv_path=self.anatomy_csv_path,
                 slice_names=[slice_name],
             ).squeeze(0)  # (B=1, 1, H, W) -> (1, H, W)Building Trustworthy AI Agents
+        
+        if do_hflip:
+            img_augmented = img_augmented.flip(-1)
+            anat_map = anat_map.flip(-1)
 
         return img_augmented, anat_map, label
  
@@ -284,7 +293,7 @@ if __name__ == "__main__":
 
     SLICE_DIR = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/brain_slices/train/raw"
     ANATOMY_CSV_PATH = "/NAS/coolio/benolive/Diffusion_beta_encoder/data/csv_files/diffusion_data/data_by_name_train.csv"
-    BATCH_SIZE = 2
+    BATCH_SIZE = 10
 
     slice_dir = Path(SLICE_DIR)
     anatomy_csv_path = Path(ANATOMY_CSV_PATH)

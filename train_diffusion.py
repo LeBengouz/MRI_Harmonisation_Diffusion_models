@@ -219,8 +219,15 @@ def train(cfg):
         os.makedirs(cfg["checkpoint_dir"], exist_ok=True)
         writer = SummaryWriter(cfg["tb_log_dir"])
         print(f"[logger] TensorBoard writer créé dans {cfg['tb_log_dir']}")
- 
 
+    
+    # Variables early stopping
+    # Suivre la meilleure MSE train observée et compteur de patience.
+    # On mesure à chaque epoch (train/mse_epoch)
+    best_train_mse   = float("inf")
+    patience_counter = 0
+    best_ckpt_path   = os.path.join(cfg["checkpoint_dir"], "best_ckpt.pt") if accelerator.is_main_process else None
+    
     # TRAINING LOOP 
     for epoch in range(start_epoch, cfg["num_epochs"]):
         model_diffusion.train()
@@ -276,16 +283,103 @@ def train(cfg):
             progress_bar.set_postfix({"loss": f"{avg_loss:.6f}"})
  
         # TensorBoard logging epoch
+        train_mse_epoch = epoch_loss / len(train_loader)
         if accelerator.is_main_process and writer is not None:
-            writer.add_scalar("train/loss_epoch", epoch_loss / len(train_loader), epoch)
+            writer.add_scalar("train/mse_epoch", train_mse_epoch, epoch)
+
+            # Verif early stopping à chaque epoch
+            # On broadcast train_mse_epoch depuis le main process vers tous les autres
+            mse_to_broadcast = [train_mse_epoch if accelerator.is_main_process else None]
+            accelerator.wait_for_everyone()
+            torch.distributed.broadcast_object_list(mse_to_broadcast, src=0) if accelerator.num_processes > 1 else None
+            train_mse_epoch_global = mse_to_broadcast[0]
+
+            improved = train_mse_epoch_global < best_train_mse - cfg["early_stopping_min_delta"]
+            if improved:
+                best_train_mse   = train_mse_epoch_global
+                patience_counter = 0
+                # Sauvegarder le meilleur checkpoint
+                save_checkpoint(
+                    epoch + 1,
+                    global_step,
+                    model_diffusion,
+                    embedder,
+                    optimizer,
+                    cfg["checkpoint_dir"],
+                    accelerator,
+                    filename="best_ckpt.pt",
+                )
+                if accelerator.is_main_process:
+                    print(f"[early_stopping] epoch {epoch} | nouvelle meilleure MSE train : {best_train_mse:.6f} -> best_ckpt.pt sauvegardé")
+            else:
+                patience_counter += 1
+
+            if patience_counter >= cfg["early_stopping_patience"]:
+                if accelerator.is_main_process:
+                    print(f"[early_stopping] Stopper l'entraînement à l'epoch {epoch} après {patience_counter} epochs sans amélioration")
+                break
+
  
 
         # EVAL
         if (epoch + 1) % cfg["eval_every_epoch"] == 0 or epoch == start_epoch:
             model_diffusion.eval()
  
-            with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            with torch.no_grad():
+
+                # Somme des mse et nombre local d'exemples; tenseurs existant sur chaque GPU
+                local_test_loss_sum = torch.zeros((), device=accelerator.device)
+                local_test_count    = torch.zeros((), device=accelerator.device)
+
+                for test_batch in tqdm(test_loader, desc=f"Epoch {epoch} - test MSE", ncols=120, leave=False, disable=not accelerator.is_main_process):
+                    test_slices, test_anat_maps, test_label_ids = test_batch
+                    test_slices    = test_slices.to(accelerator.device, non_blocking=True).float()
+                    test_anat_maps = test_anat_maps.to(accelerator.device, non_blocking=True).float()
+                    test_label_ids = test_label_ids.to(accelerator.device)
  
+                    test_timesteps = torch.randint(
+                        0, noise_scheduler.num_train_timesteps, (test_slices.shape[0],),
+                        device=accelerator.device, dtype=torch.long,
+                    )
+                    test_noise         = torch.randn_like(test_slices)
+                    test_noisy_latents = noise_scheduler.add_noise(test_slices, test_noise, test_timesteps)
+                    test_label_emb     = embedder(test_label_ids).unsqueeze(1)
+                    test_model_input   = torch.cat([test_noisy_latents, test_anat_maps], dim=1)
+                    test_noise_pred    = model_diffusion(test_model_input, test_timesteps, encoder_hidden_states=test_label_emb)
+
+                    # old :
+                    # test_loss         += mse_loss(test_noise_pred.float(), test_noise.float()).item()
+
+                    # MSE moyenne du batch local
+                    batch_loss = mse_loss(test_noise_pred.float(), test_noise.float())
+
+                    # Pondération par la taille du batch local
+                    batch_size = test_slices.shape[0]
+
+                    local_test_loss_sum += batch_loss.detach() * batch_size
+                    local_test_count    += batch_size
+ 
+                # AGRÉGATION MULTI-GPU
+                # On empile loss_sum et count dans un tenseur de forme (1, 2) -> afin que gather donne un tenseur de forme (num_processes, 2).
+                local_metrics = torch.stack([
+                    local_test_loss_sum,
+                    local_test_count,
+                ]).unsqueeze(0)
+
+                # gather doit être appelé par TOUS les processus.
+                # En mono-GPU, c'est équivalent à un no-op.
+                all_metrics = accelerator.gather(local_metrics)
+
+                global_test_loss_sum = all_metrics[:, 0].sum()
+                global_test_count    = all_metrics[:, 1].sum()
+
+                test_mse_epoch = (global_test_loss_sum / global_test_count).item()
+                if accelerator.is_main_process and writer is not None:
+                    writer.add_scalar("eval/mse_epoch", test_mse_epoch, epoch)
+                    print(f"[eval] epoch {epoch} | train MSE: {train_mse_epoch:.6f} | test MSE global: {test_mse_epoch:.6f}")
+
+            # Génération DDIM + visualisation (autocast séparé car bfloat16) :
+            with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.bfloat16):
                 # Récupérer un seul batch de test
                 eval_slices, eval_anat_maps, eval_label_ids = next(iter(test_loader))
                 eval_slices    = eval_slices.to(accelerator.device, non_blocking=True).float()

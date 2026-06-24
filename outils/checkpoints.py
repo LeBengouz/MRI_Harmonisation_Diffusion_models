@@ -5,7 +5,11 @@ Saving and loading checkpoints from a directory and pt files.
 import torch
 import os
 
-def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, accelerator):
+def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, accelerator, filename=None):
+    if filename is None:
+        filename = f"ckpt_ep{epoch:04d}_full.pt"
+    fname = os.path.join(checkpoint_dir, filename)
+
     accelerator.wait_for_everyone()
     unwrapped = accelerator.unwrap_model(model)
     if accelerator.is_main_process:
@@ -16,7 +20,6 @@ def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, acc
             "epoch": epoch,
             "step": step,
         }
-        fname = os.path.join(checkpoint_dir, f"ckpt_ep{epoch:04d}_full.pt")
         torch.save(ckpt, fname)
         print(f"[checkpoint] saved -> {fname}")
 

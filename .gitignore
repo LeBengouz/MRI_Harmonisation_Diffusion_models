@@ -168,6 +168,10 @@ cython_debug/
 *.pth
 *.ckpt
 
+# checkpoints modele de diffusion
+/checkpoints_diffusion/
+
+
 # Dossier de tests
 /tests/
 # fichier de tests
@@ -175,6 +179,11 @@ test_format.py
 
 # logs tensor boards
 /tensor_board_logs/
+
+# Dossier configs
+/configs/
+
+.vscode
 
 
 
