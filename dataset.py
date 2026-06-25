@@ -21,6 +21,8 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+import albumentations as A
+
 # anatomy_map.py se trouve dans le dossier models/ à la racine du projet
 try:
     from models.anatomy_map import (
@@ -88,13 +90,23 @@ class SliceDataset(Dataset):
     GAMMA_VALUES_DEFAULT = [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4]
 
     def __init__(self, slice_dir, train = True, anatomy_mode: Literal["naive", "encoded"] = "naive", anatomy_csv_path = None, gamma_values = None,
-        augment_spatial = True):
+        augment_spatial = True, augment_elastic = True, elastic_alpha = 100.0, elastic_sigma = 6.0):
 
         self.slice_dir = Path(slice_dir)
         self.train = train
         self.anatomy_mode = anatomy_mode
         self.anatomy_csv_path = anatomy_csv_path
         self.augment_spatial = augment_spatial
+
+        self.augment_elastic = augment_elastic
+
+        # Transform définie ici puis utilisé à chaque __getitem__
+        # on gère la proba dans __getitem__
+        # padding constant à 0 (= fond noir) ce qui correspond aux données normalement 
+        self.elastic_transform = A.Compose(
+            [A.ElasticTransform(alpha=elastic_alpha, sigma=elastic_sigma, p=1.0, border_mode=0)], 
+            additional_targets={"anat_map": "image"}
+        ) if augment_elastic else None
 
         assert self.slice_dir.exists(), f"Dossier des slices introuvable : {self.slice_dir}"
  
@@ -158,7 +170,6 @@ class SliceDataset(Dataset):
             anat_map = make_structural_anatomy_map_2d(
                 img.unsqueeze(0),  # (1, 1, H, W)
             ).squeeze(0)  # -> (1, H, W)
-
         else:  # encoded
             # load_beta_encoded_anatomy attend une liste de noms
             anat_map = load_beta_encoded_anatomy(
@@ -169,6 +180,17 @@ class SliceDataset(Dataset):
         if do_hflip:
             img_augmented = img_augmented.flip(-1)
             anat_map = anat_map.flip(-1)
+
+        # Elastic deformation = la même sur la raw image et son anatomy map
+        if self.train and self.elastic_transform is not None and random.random() < 0.5:
+            # conversion numpy
+            img_np = img_augmented.squeeze(0).numpy()   # (H, W))
+            anat_np = anat_map.squeeze(0).numpy()           
+
+            result = self.elastic_transform(image=img_np, anat_map=anat_np) # la même déformation élastique est appliquée à image et à anat_map
+
+            img_augmented = torch.from_numpy(result["image"]).unsqueeze(0)   # (1, H, W)
+            anat_map = torch.from_numpy(result["anat_map"]).unsqueeze(0)
 
         return img_augmented, anat_map, label
  
