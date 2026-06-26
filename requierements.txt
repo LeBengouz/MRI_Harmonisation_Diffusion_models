@@ -1,0 +1,31 @@
+# Python 3.11 recommandé
+
+# Installation : python -m pip install -r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+# Deep learning / diffusion
+
+torch==2.6.0+cu124
+accelerate==1.14.0
+diffusers==0.38.0
+tensorboard==2.20.0
+
+# Data / maths
+
+numpy>=2.4,<2.5
+pandas>=3.0,<3.1
+scipy>=1.17,<1.18
+
+# Images / pre-processing
+
+matplotlib>=3.10,<3.11
+pillow>=12.0,<13.0
+albumentations==2.0.8
+opencv-python-headless>=4.13,<4.14
+nibabel==5.4.2
+
+# Utilities
+
+tqdm==4.67.3
+psutil==7.2.2
