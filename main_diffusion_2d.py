@@ -15,7 +15,7 @@ from train_diffusion import train, evaluate
  
 
 #"""
-CONFIG_PATH = "configs/config_reverse_encoded.json" 
+CONFIG_PATH = "configs/config2.json" 
 MODE = "train" # train ou eval
 EVAL_CHECKPOINT_PATH = None # (obligatoire si MODE == "eval")
 #"""
@@ -24,11 +24,11 @@ EVAL_CHECKPOINT_PATH = None # (obligatoire si MODE == "eval")
 # ====== Eval ======
 
 # reverse beta encoded anat
-#"""
+"""
 CONFIG_PATH = "configs/config_reverse_encoded.json" 
 MODE = "eval" # train ou eval
 EVAL_CHECKPOINT_PATH = "/NAS/coolio/benolive/Diffusion_beta_encoder/checkpoints_diffusion/diffusion_2d/config_reverse_encoded/best_ckpt.pt" 
-# """
+"""
 
 
 # Eval beta encoded anatomy

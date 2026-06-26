@@ -24,6 +24,7 @@ import os
 import random
 from functools import partial
 from pathlib import Path
+import numpy as np
  
 import torch
 import torch.nn as nn
@@ -174,10 +175,17 @@ def ddim_inference(model: nn.Module, noise_scheduler: DDIMScheduler, eval_slices
 
 
 # Boucle training DDIM
+def set_seed(seed = 307):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 def train(cfg):
     print("[train] démarrage de l'entraînement")
+
+    set_seed(307)
 
     # Label mapping
     ds2id = build_label_mapping_for_cfg(cfg)
