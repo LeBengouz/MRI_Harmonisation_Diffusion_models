@@ -151,6 +151,8 @@ cython_debug/
 # Mais garder les dossiers visibles grâce aux .gitkeep
 !/data/brain_slices/.gitkeep
 !/data/csv_files/.gitkeep
+data/experiment_srpbs/
+experiments/experiment_similarite_anatomy/data_by_name_test.csv
 
 
 # log out de MR-CLIP (embeddings)
