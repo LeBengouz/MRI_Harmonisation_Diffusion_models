@@ -5,7 +5,7 @@ Saving and loading checkpoints from a directory and pt files.
 import torch
 import os
 
-def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, accelerator, filename=None):
+def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, accelerator, filename=None, ds2id=None):
     if filename is None:
         filename = f"ckpt_ep{epoch:04d}_full.pt"
     fname = os.path.join(checkpoint_dir, filename)
@@ -19,6 +19,7 @@ def save_checkpoint(epoch, step, model, embedder, optimizer, checkpoint_dir, acc
             "optimizer_state_dict": optimizer.state_dict(),
             "epoch": epoch,
             "step": step,
+            "ds2id": ds2id,   # None si non fourni, géré en lecture par .get()
         }
         torch.save(ckpt, fname)
         print(f"[checkpoint] saved -> {fname}")
@@ -69,5 +70,30 @@ def load_checkpoint_for_eval(checkpoint_path, model_diffusion, embedder, acceler
  
     epoch = ckpt.get("epoch", 0)
     global_step = ckpt.get("step", 0)
+
+    ds2id = ckpt.get("ds2id", None)   # None pour les anciens checkpoints qui ont pas ds2id (penser à relancer les entraînements précédents)
+    if ds2id is None:
+        print("[load_checkpoint_for_eval] /!\ ds2id absent du checkpoint (ancien format) - à reconstruire depuis la config")
+    else:
+        print(f"[load_checkpoint_for_eval] ds2id chargé ({len(ds2id)} classes)")
+
     print(f"Checkpoint chargé depuis {checkpoint_path} à partir de l'epoch ={epoch}, global_step={global_step}")
-    return epoch, global_step
+    return epoch, global_step, ds2id
+
+
+def read_checkpoint_metadata(checkpoint_path, accelerator):
+    """
+    Lit uniquement les métadonnées d'un checkpoint (epoch, step, ds2id) mais ne charge PAS les poids.
+    Utile pour connaître ds2id avant de construire l'embedder à la bonne taille lorsqu'on fait l'inference (tâche d'harmonisation)
+    """
+    ckpt   = torch.load(checkpoint_path, map_location=accelerator.device)
+    epoch  = ckpt.get("epoch", 0)
+    step   = ckpt.get("step", 0)
+    ds2id  = ckpt.get("ds2id", None)
+    if ds2id is None:
+        raise ValueError(
+            f"[read_checkpoint_metadata] ds2id absent de {checkpoint_path}.\n"
+            "Ce checkpoint a été sauvegardé avant l'ajout de ds2id dans save_checkpoint."
+        )
+    print(f"[read_checkpoint_metadata] ds2id lu ({len(ds2id)} classes, epoch={epoch})")
+    return epoch, step, ds2id

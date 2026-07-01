@@ -75,6 +75,18 @@ def build_dataloaders(cfg, ds2id):
                              collate_fn=collate)
     return train_loader, test_loader
 
+# version pour evaluate
+def build_test_dataloader(cfg, ds2id):
+    collate = partial(collate_fn_with_label_ids, ds2id=ds2id, p_uncond=cfg["p_uncond"])
+    test_ds = SliceDataset(slice_dir=cfg["test_dir"], train=False, 
+                           anatomy_mode=cfg["anatomy_mode"], 
+                           anatomy_csv_path=cfg["anatomy_csv_path_test"])
+    return DataLoader(test_ds, batch_size=cfg["batch_size"], shuffle=False,
+                      num_workers=cfg["num_workers"], pin_memory=True,
+                      persistent_workers=cfg["num_workers"] > 0,
+                      prefetch_factor=2 if cfg["num_workers"] > 0 else None,
+                      collate_fn=collate)
+
 
 def build_model(cfg):
     return UNet2DConditionModel_Optimized(
@@ -316,6 +328,7 @@ def train(cfg):
                     cfg["checkpoint_dir"],
                     accelerator,
                     filename="best_ckpt.pt",
+                    ds2id=ds2id,
                 )
                 if accelerator.is_main_process:
                     print(f"[early_stopping] epoch {epoch} | nouvelle meilleure MSE train : {best_train_mse:.6f} -> best_ckpt.pt sauvegardé")
@@ -430,6 +443,7 @@ def train(cfg):
                 optimizer,
                 cfg["checkpoint_dir"],
                 accelerator,
+                ds2id=ds2id,
             )
  
     # Fermeture TensorBoard
@@ -463,11 +477,20 @@ def evaluate(cfg, checkpoint_path):
     noise_scheduler = DDIMScheduler(num_train_timesteps=cfg["num_train_timesteps"])
     mse_loss = nn.MSELoss()
  
-    _, test_loader = build_dataloaders(cfg, ds2id) # si jeu eval, remplacer ici
+    #_, test_loader = build_dataloaders(cfg, ds2id) # si jeu eval, remplacer ici
+    test_loader = build_test_dataloader(cfg, ds2id)
 
     model_diffusion, embedder, test_loader = accelerator.prepare( model_diffusion, embedder, test_loader)
  
-    epoch_loaded, step_loaded = load_checkpoint_for_eval(checkpoint_path, model_diffusion, embedder, accelerator)
+    epoch_loaded, step_loaded, ds2id_ckpt = load_checkpoint_for_eval(checkpoint_path, model_diffusion, embedder, accelerator)
+    if ds2id_ckpt is not None:
+        ds2id   = ds2id_ckpt
+        n_classes = len(ds2id)
+        # Redimensionner l'embedder pour correspondre au checkpoint
+        embedder = nn.Embedding(n_classes + 1, cfg["cross_attention_dim"])
+        embedder = accelerator.prepare(embedder)
+    else:
+        print("[evaluate] fallback : ds2id reconstruit depuis la config")
     print(f"[Eval] checkpoint chargé (epoch={epoch_loaded}, step={step_loaded})")
  
     os.makedirs(cfg["checkpoint_dir"], exist_ok=True)

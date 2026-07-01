@@ -387,7 +387,7 @@ def process_volume(
             stem = stem[: -len(ext)]
             break
  
-    raw_out_path = output_dir_raw / f"{stem}_raw_slice.npy"
+    raw_out_path = output_dir_raw / f"{stem}.npy"
     save_slice_as_npy(masked_slice, raw_out_path)
  
     # --- Inférence beta_encoder ---
@@ -405,7 +405,7 @@ def process_volume(
           f"min={result_np.min():.4f}  max={result_np.max():.4f}")
  
     # --- Sauvegarde de la slice encodée ---
-    anatomy_out_path = output_dir_encoded / f"{stem}_anatomy.npy"
+    anatomy_out_path = output_dir_encoded / f"{stem}.npy"
     save_slice_as_npy(result_np, anatomy_out_path)
 
     return stem, raw_out_path, anatomy_out_path 
