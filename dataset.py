@@ -11,6 +11,7 @@ Adapté depuis VolumeDataset (3D, fichiers .pt + torchio) remplacé par :
 '''
 
 import os
+import csv
 import random
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
@@ -227,6 +228,54 @@ def build_label_mapping(slice_dir, gamma_values: Optional[List[float]] = None) -
     print(f"Nombre de classes: {n_classes}")
  
     return ds2id, id2ds
+
+
+
+class SliceDatasetInference(SliceDataset):
+    """
+    Variante uniquement pour l'inférence de SliceDataset : 
+    - force train=False (pas d'augmentation),
+    - donne aussi le mask (pour re-masquer le fond après génération) lu dans le csv, colonne "mask"
+    """
+    def __init__(self, slice_dir, anatomy_mode="naive", anatomy_csv_path=None):
+        super().__init__(
+            slice_dir=slice_dir,
+            train=False,
+            anatomy_mode=anatomy_mode,
+            anatomy_csv_path=anatomy_csv_path,
+            augment_spatial=False,
+            augment_elastic=False,
+        )
+        self._mask_index = self._load_mask_index(anatomy_csv_path)
+
+    def _load_mask_index(self, mask_csv_path):
+        """
+        mask_csv = anatomy_csv but having an extra mask_path column
+        """
+        assert Path(mask_csv_path).exists(), f"CSV mask introuvable : {mask_csv_path}"
+        with open(mask_csv_path, newline="") as f:
+            return {row["name"]: row["mask_path"] for row in csv.DictReader(f)}
+    
+    def __getitem__(self, idx):
+        img_augmented, anat_map, label = super().__getitem__(idx)
+        slice_name = self.npy_files[idx].stem
+        raw_arr = np.load(self.npy_files[idx]).astype(np.float32)  # pour vérifier la shape
+
+        if self._mask_index is not None and slice_name in self._mask_index:
+            mask_arr = np.load(self._mask_index[slice_name]).astype(np.float32)
+        else:
+            mask_arr = (raw_arr != 0).astype(np.float32)  # déduire du fond = 0 sur la slice raw si on a pas le mask
+            print(f"[SliceDatasetInference] mask dérivé (fond=0) pour {slice_name} (pas trouvé en CSV)")
+
+        assert mask_arr.shape == raw_arr.shape, (
+            f"Mask shape {mask_arr.shape} != slice shape {raw_arr.shape} pour {slice_name}"
+        )
+        mask_bin = torch.from_numpy((mask_arr > 0.5).astype(np.float32)).unsqueeze(0)  # (1, H, W)
+
+        return img_augmented, anat_map, label, mask_bin
+
+
+
 
 
 def build_label_mapping_from_csv(anatomy_csv_path, gamma_values: Optional[List[float]] = None,) -> Tuple[Dict[str, int], Dict[int, str]]:

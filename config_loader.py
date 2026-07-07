@@ -49,7 +49,6 @@ _REQUIRED_TRAIN_KEYS = [
 # Clés supplémentaires requises uniquement en mode inference
 _REQUIRED_INFERENCE_KEYS = [
     "test_dir",
-    "anatomy_csv_path_test",
     "target_label",
     "guidance_scale",
     "p_uncond",
@@ -90,7 +89,8 @@ def load_config(config_path,  mode="train"):
         raise ValueError(
             f"[config_loader] Clés manquantes dans {config_path.name} (mode='{mode}') : {missing}"
         )
-
+    if cfg.get("anatomy_mode") == "encoded" and cfg.get("anatomy_csv_path_test") is None:
+        raise ValueError("[config_loader] anatomy_csv_path_test requis quand anatomy_mode='encoded'")
  
     
     cfg["block_out_channels"] = tuple(cfg["block_out_channels"])    # ex : tuple -> (32, 64, 256, 512)

@@ -25,7 +25,7 @@ import re
 from collections import defaultdict
 
 
-from dataset import SliceDataset, collate_fn_with_label_ids
+from dataset import SliceDatasetInference, collate_fn_with_label_ids
 from models.diffusion.unet import UNet2DConditionModel_Optimized
 from outils.checkpoints import load_checkpoint_for_eval
 from train_diffusion import build_model, ddim_inference
@@ -100,11 +100,10 @@ def inference_harmoniser(cfg, checkpoint_path, output_dir):
 
 
 
-    test_ds = SliceDataset(
+    test_ds = SliceDatasetInference(
         slice_dir=cfg["test_dir"],
-        train=False,
         anatomy_mode=cfg["anatomy_mode"],
-        anatomy_csv_path=cfg["anatomy_csv_path_test"],
+        anatomy_csv_path=cfg["anatomy_csv_path_test"]
     )
     test_loader = DataLoader(
         test_ds,
@@ -131,9 +130,10 @@ def inference_harmoniser(cfg, checkpoint_path, output_dir):
 
     with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.bfloat16):
         for batch_idx, batch in enumerate(tqdm(test_loader, desc="harmonisation", disable=not accelerator.is_main_process)):
-            slices, anat_maps, _ = batch   # on ignore les label_ids originaux
+            slices, anat_maps, _, masks = batch = batch   # on ignore les label_ids originaux
             slices    = slices.to(accelerator.device, non_blocking=True).float()
             anat_maps = anat_maps.to(accelerator.device, non_blocking=True).float()
+            masks     = masks.to(accelerator.device, non_blocking=True).float()
 
             batch_size = slices.shape[0]
 
@@ -159,6 +159,8 @@ def inference_harmoniser(cfg, checkpoint_path, output_dir):
                 guidance_scale=cfg.get("guidance_scale", 1.0),
             )
             harmonised = harmonised[:, :, :orig_h, :orig_w] # On remet à la taille originale
+            assert harmonised.shape[-2:] == masks.shape[-2:], "mask non aligné avec la slice générée"
+            harmonised = harmonised * masks   # on ré-applique le mask
 
             # Sauvegarde des slices harmonisées en .npy
             if accelerator.is_main_process:
@@ -186,7 +188,8 @@ def collate_force_target(batch, target_id):
     slices   = torch.stack([b[0] for b in batch])
     anat_maps = torch.stack([b[1] for b in batch])
     ids      = torch.tensor([target_id] * len(batch), dtype=torch.long)
-    return slices, anat_maps, ids
+    masks     = torch.stack([b[3] for b in batch])
+    return slices, anat_maps, ids, masks
 
 
 def _save_control_figure(output_dir, target_label, epoch_loaded, test_ds, n_subjects=3):
