@@ -11,11 +11,12 @@ ANATOMY_OUT_PATH = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/models/anat
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Device : {device}")
  
-VOLUME_DIR        = Path("/NAS/coolio/Barnabe/SRPBS_post_process/native/brain")
-MASK_DIR          = Path("/NAS/coolio/Barnabe/SRPBS_post_process/native/brain_mask")
+VOLUME_DIR          = Path("/NAS/coolio/Barnabe/SRPBS_post_process/native/brain")
+MASK_DIR            = Path("/NAS/coolio/Barnabe/SRPBS_post_process/native/brain_mask")
 OUTPUT_PATH_RAW     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/experiment_srpbs/raw")
 OUTPUT_PATH_ENCODED = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/experiment_srpbs/encoded")
 OUTPUT_CSV_PATH = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/experiments/experiment_similarite_anatomy/data_by_name_test.csv") 
+OUTPUT_MASK_DIR     = Path("/NAS/coolio/benolive/Diffusion_beta_encoder/data/experiment_srpbs/masks") # dossier où les slices mask seront enregistrées
  
 # ==== U-Net (anatomy encoder) ====
  
@@ -355,6 +356,7 @@ def process_volume(
     mask_dir: Path,
     output_dir_raw: Path,
     output_dir_encoded: Path,
+    output_dir_mask: Path,
     target_z_ratio: float = 0.5,
 ) -> None:
     """
@@ -376,17 +378,22 @@ def process_volume(
     print(f"  Masque  : {mask_path.name}")
     mask_2d = load_mask_slice(mask_path, z_idx=z_idx)
     mask_2d = np.flip(mask_2d, axis=0).copy()
- 
-    # Application du masque : fond=0, contrastes bruts conservés
-    masked_slice = apply_mask(slice_raw, mask_2d)
- 
-    # --- Sauvegarde de la slice brute ---
+
+    # Extraction nom du mask : même nom que le volume
     stem = volume_path.name
     for ext in (".nii.gz", ".nii"):
         if stem.endswith(ext):
             stem = stem[: -len(ext)]
             break
+
+    # --- Sauvegarde du mask 2D extrait ---
+    mask_out_path = output_dir_mask / f"{stem}.npy"
+    save_slice_as_npy(mask_2d.astype(np.uint8), mask_out_path)
  
+    # Application du masque : fond=0, contrastes bruts conservés
+    masked_slice = apply_mask(slice_raw, mask_2d)
+ 
+    # --- Sauvegarde de la slice brute ---
     raw_out_path = output_dir_raw / f"{stem}.npy"
     save_slice_as_npy(masked_slice, raw_out_path)
  
@@ -408,13 +415,14 @@ def process_volume(
     anatomy_out_path = output_dir_encoded / f"{stem}.npy"
     save_slice_as_npy(result_np, anatomy_out_path)
 
-    return stem, raw_out_path, anatomy_out_path 
+    return stem, raw_out_path, anatomy_out_path, mask_out_path
  
  
 if __name__ == "__main__":
     OUTPUT_PATH_RAW.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH_ENCODED.mkdir(parents=True, exist_ok=True)
     OUTPUT_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_MASK_DIR.mkdir(parents=True, exist_ok=True)
  
     volume_paths = collect_volumes(VOLUME_DIR)
  
@@ -424,18 +432,20 @@ if __name__ == "__main__":
     csv_rows = [] 
     for volume_path in volume_paths:
         try:
-            stem, raw_path, enc_path = process_volume(  
+            stem, raw_path, enc_path, mask_path = process_volume(  
                 volume_path        = volume_path,
                 beta_encoder       = beta_encoder,
                 mask_dir           = MASK_DIR,
                 output_dir_raw     = OUTPUT_PATH_RAW,
                 output_dir_encoded = OUTPUT_PATH_ENCODED,
+                output_dir_mask    = OUTPUT_MASK_DIR,
                 target_z_ratio     = 0.5,
             )
             csv_rows.append({
                 "name":         stem,
                 "raw_path":     str(raw_path),
                 "encoded_path": str(enc_path),
+                "mask_path":    str(mask_path),
             })
             ok += 1
         except Exception as e:
@@ -444,10 +454,10 @@ if __name__ == "__main__":
 
     # CSV :
     with open(OUTPUT_CSV_PATH, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["name", "raw_path", "encoded_path"])
+        writer = csv.DictWriter(f, fieldnames=["name", "raw_path", "encoded_path", "mask_path"])
         writer.writeheader()
         writer.writerows(csv_rows)
-    print(f"CSV sauvegardé   : {OUTPUT_CSV_PATH}")
+        print(f"CSV sauvegardé   : {OUTPUT_CSV_PATH}")
 
  
     print(f"\nPipeline terminé - {ok}/{len(volume_paths)} volumes traités avec succès.")
