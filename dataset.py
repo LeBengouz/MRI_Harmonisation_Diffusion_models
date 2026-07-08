@@ -79,7 +79,6 @@ def _zscore_normalize(img: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
 
 
 # class dataset
-
 class SliceDataset(Dataset):
     """
     Dataset de slices 2D extrait d'un dossier au format .npy
@@ -248,21 +247,38 @@ class SliceDatasetInference(SliceDataset):
         )
         self._mask_index = self._load_mask_index(anatomy_csv_path)
 
-    def _load_mask_index(self, mask_csv_path):
+    def _load_mask_index(self, anatomy_csv_path):
         """
         mask_csv = anatomy_csv but having an extra mask_path column
+        Si CSV non fourni ou pas de colonne "mask_path" -> Retourner dictionnaire vide (et on calculera le mask sur la slice raw)
         """
-        assert Path(mask_csv_path).exists(), f"CSV mask introuvable : {mask_csv_path}"
-        with open(mask_csv_path, newline="") as f:
-            return {row["name"]: row["mask_path"] for row in csv.DictReader(f)}
+        if anatomy_csv_path is None:
+            print("[SliceDatasetInference] pas de CSV fourni -> Alors fallback (fond=0) pour toutes les slices")
+            return {}
+
+        if not Path(anatomy_csv_path).exists():
+            print(f"[SliceDatasetInference] CSV introuvable : {anatomy_csv_path} -> Alors fallback (fond=0) pour toutes les slices")
+            return {}
+
+        with open(anatomy_csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            if reader.fieldnames is None or "mask_path" not in reader.fieldnames:
+                print(f"[SliceDatasetInference] colonne 'mask_path' absente de {anatomy_csv_path} -> fallback fond=0")
+                return {}
+            return {
+                row["name"]: row["mask_path"]
+                for row in reader
+                if row.get("mask_path")  # ignore les valeurs vides
+            }
     
     def __getitem__(self, idx):
         img_augmented, anat_map, label = super().__getitem__(idx)
         slice_name = self.npy_files[idx].stem
         raw_arr = np.load(self.npy_files[idx]).astype(np.float32)  # pour vérifier la shape
 
-        if self._mask_index is not None and slice_name in self._mask_index:
-            mask_arr = np.load(self._mask_index[slice_name]).astype(np.float32)
+        mask_path = self._mask_index.get(slice_name)
+        if mask_path is not None:
+            mask_arr = np.load(mask_path).astype(np.float32)
         else:
             mask_arr = (raw_arr != 0).astype(np.float32)  # déduire du fond = 0 sur la slice raw si on a pas le mask
             print(f"[SliceDatasetInference] mask dérivé (fond=0) pour {slice_name} (pas trouvé en CSV)")

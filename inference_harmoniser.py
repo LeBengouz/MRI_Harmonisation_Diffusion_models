@@ -258,7 +258,7 @@ def _save_control_figure(output_dir, target_label, epoch_loaded, test_ds, n_subj
             # On cherche l'index dans test_ds pour charger via __getitem__
             try:
                 idx      = [Path(p).stem for p in test_ds.npy_files].index(stem)
-                _, anat, _ = test_ds[idx]
+                _, anat, _, _ = test_ds[idx]
                 anat_arr = anat[0].numpy()   # (1, H, W) -> (H, W)
             except (ValueError, Exception) as e:
                 anat_arr = np.zeros_like(harm_arr)
