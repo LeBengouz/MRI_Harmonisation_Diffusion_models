@@ -137,17 +137,30 @@ def run_experiment(input_dir, label):
     ssim_mean_per_subject = {}
     psnr_mean_per_subject = {}
 
+    # Toutes les valeurs (mesures par pairs) pour chaque sujet
+    ssim_values_per_subject = {}
+    psnr_values_per_subject = {}
+
+    # variabilité pour chaque sujet
+    ssim_std_per_subject = {}
+    psnr_std_per_subject = {}
+
     for subject, path_list in dic_paths_per_subject.items():
         n = len(path_list)
         if n < 2:
             print(f"  [{label}] {subject} : pas assez d'images (n={n}), ignoré.")
             ssim_mean_per_subject[subject] = None
             psnr_mean_per_subject[subject] = None
+
+            ssim_values_per_subject[subject] = []
+            psnr_values_per_subject[subject] = []
+
+            ssim_std_per_subject[subject] = None
+            psnr_std_per_subject[subject] = None
             continue
 
-        sum_ssim = 0.0
-        sum_psnr = 0.0
-        n_pairs = 0
+        subject_ssim_values = []
+        subject_psnr_values = []
 
         for path1, path2 in generate_pairs(path_list):
             img1 = load_npy_2d(path1)
@@ -159,25 +172,27 @@ def run_experiment(input_dir, label):
                 )
 
             pair_data_range = robust_pair_data_range(img1, img2)
-            ssim_value, _ = ssim(img1, img2, win_size=7, data_range=pair_data_range, full=True)
+            ssim_value = ssim(img1, img2, win_size=7, data_range=pair_data_range, full=False)
             psnr_value = compute_PSNR(img1, img2, R=R_GLOBAL)
 
-            sum_ssim += ssim_value
-            sum_psnr += psnr_value
-            n_pairs += 1
+            subject_ssim_values.append(float(ssim_value))
+            subject_psnr_values.append(float(psnr_value))
 
-        ssim_mean_per_subject[subject] = sum_ssim / n_pairs
-        psnr_mean_per_subject[subject] = sum_psnr / n_pairs
+        ssim_values_per_subject[subject] = subject_ssim_values
+        psnr_values_per_subject[subject] = subject_psnr_values
 
-    valid_ssim = [v for v in ssim_mean_per_subject.values() if v is not None]
-    valid_psnr = [v for v in psnr_mean_per_subject.values() if v is not None]
+        ssim_mean_per_subject[subject] = float(np.mean(subject_ssim_values))
+        psnr_mean_per_subject[subject] = float(np.mean(subject_psnr_values))
 
-    if not valid_ssim or not valid_psnr:
-        print(f"[{label}] Aucun sujet exploitable (toutes les valeurs sont None), ignoré.")
-        return None
+        ssim_std_per_subject[subject] = float(np.std(subject_ssim_values, ddof=1) if len(subject_ssim_values) > 1 else 0.0)
+        psnr_std_per_subject[subject] = float(np.std(subject_psnr_values, ddof=1) if len(subject_psnr_values) > 1 else 0.0)
 
-    total_mean_ssim = sum(valid_ssim) / len(valid_ssim)
-    total_mean_psnr = sum(valid_psnr) / len(valid_psnr)
+    valid_ssim = [value for value in ssim_mean_per_subject.values() if value is not None]
+
+    valid_psnr = [value for value in psnr_mean_per_subject.values() if value is not None]
+
+    total_mean_ssim = float(np.mean(valid_ssim))
+    total_mean_psnr = float(np.mean(valid_psnr))
 
     print(f"[{label}] SSIM moyenne globale = {total_mean_ssim:.4f}")
     print(f"[{label}] PSNR moyenne globale = {total_mean_psnr:.4f}")
@@ -186,13 +201,25 @@ def run_experiment(input_dir, label):
     return {
         "ssim_per_subject": ssim_mean_per_subject,
         "psnr_per_subject": psnr_mean_per_subject,
+
+        "ssim_values_per_subject": ssim_values_per_subject,
+        "psnr_values_per_subject": psnr_values_per_subject,
+
+        "ssim_std_per_subject": ssim_std_per_subject,
+        "psnr_std_per_subject": psnr_std_per_subject,
+
         "total_mean_ssim": total_mean_ssim,
         "total_mean_psnr": total_mean_psnr,
+
         "n_subjects": len(valid_ssim),
     }
 
+
+
 def plot_comparison(results_per_method, output_path):
     """
+    Non utilisée désormais /!\
+    
     results_per_method : dict {label: résultat de run_experiment (ou absent si None)}
     Ne trace que les méthodes réellement disponibles (naive, encoded et/ou reverse-encoded).
     """
@@ -233,6 +260,133 @@ def plot_comparison(results_per_method, output_path):
     print(f"Graphique sauvegardé : {output_path}")
 
 
+def plot_comparison_boxplots(results_per_method, output_dir):
+    available = {
+        label: result
+        for label, result in results_per_method.items()
+        if result is not None
+    }
+
+    if not available:
+        print("Pas de méthode dispo pour faire les figures")
+        return
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    labels = list(available.keys())
+
+    ssim_means_per_method = []
+    psnr_means_per_method = []
+    ssim_stds_per_method = []
+    psnr_stds_per_method = []
+
+    for label in labels:
+        result = available[label]
+
+        valid_subjects = [
+            subject
+            for subject in result["ssim_per_subject"]
+            if result["ssim_per_subject"].get(subject) is not None
+            and result["psnr_per_subject"].get(subject) is not None
+            and result["ssim_std_per_subject"].get(subject) is not None
+            and result["psnr_std_per_subject"].get(subject) is not None
+        ]
+
+        ssim_means_per_method.append([result["ssim_per_subject"][subject] for subject in valid_subjects])
+        psnr_means_per_method.append([result["psnr_per_subject"][subject] for subject in valid_subjects])
+        ssim_stds_per_method.append([result["ssim_std_per_subject"][subject] for subject in valid_subjects])
+
+        psnr_stds_per_method.append([result["psnr_std_per_subject"][subject] for subject in valid_subjects])
+
+    positions = np.arange(1, len(labels) + 1)
+    rng = np.random.default_rng(42)
+
+    # Fig 1 : Boxplots SSIM et PSNR moyen des sujets
+    fig_means, axes_means = plt.subplots(1, 2, figsize=(13, 6))
+    axes_means[0].boxplot(ssim_means_per_method, positions=positions, widths=0.55, showmeans=True, meanline=True)
+
+    for method_index, position in enumerate(positions):
+        values = np.asarray(ssim_means_per_method[method_index], dtype=float)
+        jitter = rng.uniform(-0.08, 0.08, size=len(values))
+        axes_means[0].scatter(position + jitter, values, alpha=0.65, s=25)
+
+        # method_mean = np.mean(values)
+        # axes_means[0].text(position, method_mean + 0.015, f"{method_mean:.4f}", ha="center", va="bottom", fontsize=10, fontweight="bold")
+
+    axes_means[0].set_title("Distribution des moyennes SSIM par sujet")
+    axes_means[0].set_ylabel("SSIM moyen")
+    axes_means[0].set_xticks(positions)
+    axes_means[0].set_xticklabels(labels)
+    axes_means[0].set_ylim(0, 1)
+    axes_means[0].grid(axis="y", alpha=0.25)
+
+    axes_means[1].boxplot(psnr_means_per_method, positions=positions, widths=0.55, showmeans=True, meanline=True)
+
+    for method_index, position in enumerate(positions):
+        values = np.asarray(psnr_means_per_method[method_index], dtype=float)
+        jitter = rng.uniform(-0.08, 0.08, size=len(values))
+
+        axes_means[1].scatter(position + jitter, values, alpha=0.65, s=25)
+
+    axes_means[1].set_title("Distribution des moyennes PSNR par sujet")
+    axes_means[1].set_ylabel("PSNR moyen (dB)")
+    axes_means[1].set_xticks(positions)
+    axes_means[1].set_xticklabels(labels)
+    axes_means[1].grid(axis="y", alpha=0.25)
+
+    fig_means.suptitle("Distribution inter-sujets des moyennes SSIM et PSNR")
+    fig_means.tight_layout(rect=[0, 0, 1, 0.95])
+
+    means_output_path = (output_dir/ "comparison_subject_means_ssim_psnr.png")
+
+    fig_means.savefig(means_output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig_means)
+
+    print(f"Graphique des moyennes sauvegardé : {means_output_path}")
+
+    # Fig 2 : variations intra-sujets
+    fig_variations, axes_variations = plt.subplots(1, 2, figsize=(13, 6))
+    axes_variations[0].boxplot(ssim_stds_per_method, positions=positions, widths=0.55, showmeans=True, meanline=True)
+
+    for method_index, position in enumerate(positions):
+        values = np.asarray(ssim_stds_per_method[method_index], dtype=float)
+
+        jitter = rng.uniform(-0.08, 0.08, size=len(values))
+        axes_variations[0].scatter(position + jitter, values, alpha=0.65, s=25)
+
+    axes_variations[0].set_title("Variations intra-sujets du SSIM")
+    axes_variations[0].set_ylabel("Écart-type intra-sujet du SSIM")
+    axes_variations[0].set_xticks(positions)
+    axes_variations[0].set_xticklabels(labels)
+    axes_variations[0].set_ylim(bottom=0)
+    axes_variations[0].grid(axis="y", alpha=0.25)
+
+    axes_variations[1].boxplot(psnr_stds_per_method, positions=positions, widths=0.55, showmeans=True, meanline=True)
+
+    for method_index, position in enumerate(positions):
+        values = np.asarray(psnr_stds_per_method[method_index], dtype=float)
+
+        jitter = rng.uniform(-0.08, 0.08, size=len(values))
+        axes_variations[1].scatter(position + jitter, values, alpha=0.65, s=25)
+
+    axes_variations[1].set_title("Variations intra-sujets du PSNR")
+    axes_variations[1].set_ylabel("Écart-type intra-sujet du PSNR (dB)")
+    axes_variations[1].set_xticks(positions)
+    axes_variations[1].set_xticklabels(labels)
+    axes_variations[1].set_ylim(bottom=0)
+    axes_variations[1].grid(axis="y", alpha=0.25)
+
+    fig_variations.suptitle("Distribution des variations intra-sujets des mesures SSIM et PSNR")
+    fig_variations.tight_layout(rect=[0, 0, 1, 0.95])
+
+    variations_output_path = (output_dir / "comparison_intra_subject_variations_ssim_psnr.png")
+    fig_variations.savefig(variations_output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig_variations)
+
+    print(f"Graphique des variations sauvegardé : {variations_output_path}")
+
+
 
 
 if __name__ == "__main__":
@@ -261,5 +415,5 @@ if __name__ == "__main__":
             print(f"{label} : SSIM={res['total_mean_ssim']:.4f}, "
                   f"PSNR={res['total_mean_psnr']:.4f} (n={res['n_subjects']} sujets)")
 
-    plot_comparison(results_per_method, OUTPUT_DIR / "comparison_ssim_psnr.png")
+    plot_comparison_boxplots(results_per_method,OUTPUT_DIR)
 
