@@ -357,35 +357,32 @@ def train(cfg):
                     test_slices    = test_slices.to(accelerator.device, non_blocking=True).float()
                     test_anat_maps = test_anat_maps.to(accelerator.device, non_blocking=True).float()
                     test_label_ids = test_label_ids.to(accelerator.device)
- 
-                    test_timesteps = torch.randint(
-                        0, noise_scheduler.num_train_timesteps, (test_slices.shape[0],),
-                        device=accelerator.device, dtype=torch.long,
-                    )
-                    test_noise         = torch.randn_like(test_slices)
-                    test_noisy_latents = noise_scheduler.add_noise(test_slices, test_noise, test_timesteps)
-                    test_label_emb     = embedder(test_label_ids).unsqueeze(1)
-                    test_model_input   = torch.cat([test_noisy_latents, test_anat_maps], dim=1)
-                    test_noise_pred    = model_diffusion(test_model_input, test_timesteps, encoder_hidden_states=test_label_emb)
 
-                    # old :
-                    # test_loss         += mse_loss(test_noise_pred.float(), test_noise.float()).item()
-
-                    # MSE moyenne du batch local
-                    batch_loss = mse_loss(test_noise_pred.float(), test_noise.float())
-
-                    # Pondération par la taille du batch local
+                    # --- new ---
                     batch_size = test_slices.shape[0]
 
+                    # Bruit pur
+                    pure_noise = torch.randn_like(test_slices)
+
+                    # Timestep fixé au max
+                    t_fixed = torch.full((batch_size,),noise_scheduler.num_train_timesteps - 1, device=accelerator.device, dtype=torch.long)
+
+                    test_label_emb   = embedder(test_label_ids).unsqueeze(1)
+                    test_model_input = torch.cat([pure_noise, test_anat_maps], dim=1)
+                    test_noise_pred  = model_diffusion(test_model_input, t_fixed, encoder_hidden_states=test_label_emb)
+
+                    # pred (1 step) -> reconstruction de la slicer (pour comparer)
+                    alpha_T = noise_scheduler.alphas_cumprod[t_fixed[0]]
+                    x0_pred = (pure_noise - (1 - alpha_T).sqrt() * test_noise_pred) / alpha_T.sqrt()
+
+                    # MSE dans l'espace image (pas dans l'espace bruit, puisqu'il n'y a pas de "target noise" ajouté à l'image
+                    batch_loss = mse_loss(x0_pred.float(), test_slices.float())
                     local_test_loss_sum += batch_loss.detach() * batch_size
                     local_test_count    += batch_size
  
                 # AGRÉGATION MULTI-GPU
                 # On empile loss_sum et count dans un tenseur de forme (1, 2) -> afin que gather donne un tenseur de forme (num_processes, 2).
-                local_metrics = torch.stack([
-                    local_test_loss_sum,
-                    local_test_count,
-                ]).unsqueeze(0)
+                local_metrics = torch.stack([local_test_loss_sum, local_test_count]).unsqueeze(0)
 
                 # gather doit être appelé par TOUS les processus.
                 # En mono-GPU, c'est équivalent à un no-op.
